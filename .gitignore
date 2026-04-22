@@ -1,10 +1,7 @@
-<<<<<<< Updated upstream
-=======
 # Virtual environment
 venv/
 env/
 
->>>>>>> Stashed changes
 # Local configurations
 .vscode/
 
