@@ -56,28 +56,28 @@ def commands(cmd):
             for pin in OUTPUTS.values():
                 pin.off()
                 
-    # OUTn ON / OUTn OFF
-    else:
-        parts = cmd.split()
-        if len(parts) == 2 and parts[0].startswith("OUT") and parts[1] in ("ON", "OFF"):
-            try:
-                n = int(parts[0][3:])
-            except ValueError:
-                print(f"ERROR: Unknown command: {cmd}")
-                return
-
-            if n not in OUTPUTS:
-                print(f"ERROR: Output {n} not available (valid: 1-12)")
-                return
-
-            if not initialized:
-                print("ERROR: System not initialized, send *INIT first")
-                return
-
-            OUTPUTS[n].on() if parts[1] == "ON" else OUTPUTS[n].off()
-
+        # OUTn ON / OUTn OFF
         else:
-            print(f"ERROR: Unknown command: {cmd}")
+            parts = cmd.split()
+            if len(parts) == 2 and parts[0].startswith("OUT") and parts[1] in ("ON", "OFF"):
+                try:
+                    n = int(parts[0][3:])
+                except ValueError:
+                    print(f"ERROR: Unknown command: {cmd}")
+                    return
+
+                if n not in OUTPUTS:
+                    print(f"ERROR: Output {n} not available (valid: 1-12)")
+                    return
+
+                if not initialized:
+                    print("ERROR: System not initialized, send *INIT first")
+                    return
+
+                OUTPUTS[n].on() if parts[1] == "ON" else OUTPUTS[n].off()
+
+            else:
+                print(f"ERROR: Unknown command: {cmd}")
 
 
 def reset():
