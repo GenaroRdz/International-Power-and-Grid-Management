@@ -1,29 +1,29 @@
 from machine import Pin
 import setup
+import INA226
 
 # Initialize output pins using GPIO numbers defined in setup
 OUTPUTS = {
-    1:  Pin(setup.PIN_OUT1,  Pin.OUT),
-    2:  Pin(setup.PIN_OUT2,  Pin.OUT),
-    3:  Pin(setup.PIN_OUT3,  Pin.OUT),
-    4:  Pin(setup.PIN_OUT4,  Pin.OUT),
-    5:  Pin(setup.PIN_OUT5,  Pin.OUT),
-    6:  Pin(setup.PIN_OUT6,  Pin.OUT),
-    7:  Pin(setup.PIN_OUT7,  Pin.OUT),
-    8:  Pin(setup.PIN_OUT8,  Pin.OUT),
-    9:  Pin(setup.PIN_OUT9,  Pin.OUT),
-    10: Pin(setup.PIN_OUT10, Pin.OUT),
-    11: Pin(setup.PIN_OUT11, Pin.OUT),
-    12: Pin(setup.PIN_OUT12, Pin.OUT),
+    "ECU1_BAT": Pin(setup.ECU1_BAT, Pin.OUT),
+    "ECU1_ACC": Pin(setup.ECU1_ACC, Pin.OUT),
+    "ECU1_IGN": Pin(setup.ECU1_IGN, Pin.OUT),
+    "ECU2_BAT": Pin(setup.ECU2_BAT, Pin.OUT),
+    "ECU2_ACC": Pin(setup.ECU2_ACC, Pin.OUT),
+    "ECU2_IGN": Pin(setup.ECU2_IGN, Pin.OUT),
+    "ECU3_BAT": Pin(setup.ECU3_BAT, Pin.OUT),
+    "ECU3_ACC": Pin(setup.ECU3_ACC, Pin.OUT),
+    "ECU3_IGN": Pin(setup.ECU3_IGN, Pin.OUT),
+    "ECU4_BAT": Pin(setup.ECU4_BAT, Pin.OUT),
+    "ECU4_ACC": Pin(setup.ECU4_ACC, Pin.OUT),
+    "ECU4_IGN": Pin(setup.ECU4_IGN, Pin.OUT),
 }
-# Tracks whether *INIT has been received before allowing output control
+
 initialized = False
 
 def commands(cmd):
     global initialized
     cmd = cmd.strip().upper()
-    
-        # Ignore empty lines
+
     if not cmd:
         return
 
@@ -39,49 +39,40 @@ def commands(cmd):
 
     elif cmd == "*IDN?":
         print(f"{setup.FABRICANTE},{setup.MODELO},{setup.SERIAL},{setup.VERSION}")
-    # Turn all outputs ON or OFF
+
+    elif cmd == "ON ALL":
+        if not initialized:
+            print("ERROR: System not initialized, send *INIT first")
+            return
+        for pin in OUTPUTS.values():
+            pin.on()
+        print("All outputs ON")
+
+    elif cmd == "OFF ALL":
+        if not initialized:
+            print("ERROR: System not initialized, send *INIT first")
+            return
+        for pin in OUTPUTS.values():
+            pin.off()
+        print("All outputs OFF")
+
+    elif cmd == "READ INA":
+        print(INA226.lectura_INA())
+
     else:
-        
-        if cmd == "ON ALL":
+        parts = cmd.split()
+        if len(parts) == 2 and parts[0] in OUTPUTS and parts[1] in ("ON", "OFF"):
             if not initialized:
                 print("ERROR: System not initialized, send *INIT first")
                 return
-            for pin in OUTPUTS.values():
-                pin.on()
-
-        elif cmd == "OFF ALL":
-            if not initialized:
-                print("ERROR: System not initialized, send *INIT first")
-                return
-            for pin in OUTPUTS.values():
-                pin.off()
-                
-        # OUTn ON / OUTn OFF
-        else:
-            parts = cmd.split()
-            if len(parts) == 2 and parts[0].startswith("OUT") and parts[1] in ("ON", "OFF"):
-                try:
-                    n = int(parts[0][3:])
-                except ValueError:
-                    print(f"ERROR: Unknown command: {cmd}")
-                    return
-
-                if n not in OUTPUTS:
-                    print(f"ERROR: Output {n} not available (valid: 1-12)")
-                    return
-
-                if not initialized:
-                    print("ERROR: System not initialized, send *INIT first")
-                    return
-
-                OUTPUTS[n].on() if parts[1] == "ON" else OUTPUTS[n].off()
-
+            if parts[1] == "ON":
+                OUTPUTS[parts[0]].on()
             else:
-                print(f"ERROR: Unknown command: {cmd}")
-
+                OUTPUTS[parts[0]].off()
+        else:
+            print(f"ERROR: Unknown command: {cmd}")
 
 def reset():
-    # Turn off all outputs and clear initialization flag
     global initialized
     initialized = False
     for pin in OUTPUTS.values():
