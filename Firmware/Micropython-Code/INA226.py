@@ -12,7 +12,7 @@ REG_MANUF_ID    = 0xFE
 REG_DIE_ID      = 0xFF
 
 INA226_ADDR    = 0x40
-R_SHUNT        = 0.1
+R_SHUNT        = 0.01
 MAX_EXPECTED_A = 0.8
 
 class INA226:
@@ -41,16 +41,20 @@ class INA226:
     def current(self):         return self._r_s16(REG_CURRENT)    * self.current_lsb
     def power(self):           return self._r_u16(REG_POWER)      * 25 * self.current_lsb
 
-def lectura_INA():
+def lectura_INA(addr=INA226_ADDR):
     """Returns a single reading from the INA226 as a formatted string."""
     try:
         i2c = I2C(0, scl=Pin(22), sda=Pin(21), freq=400000)
         devices = i2c.scan()
 
-        if INA226_ADDR not in devices:
-            return "ERROR: INA226 not detected at 0x{:02X}".format(INA226_ADDR)
+        if not devices:
+            return "ERROR: No I2C devices found"
 
-        ina = INA226(i2c)
+        if addr not in devices:
+            return "ERROR: INA226 not detected at 0x{:02X} | Found: {}".format(
+                addr, str([hex(d) for d in devices]))
+
+        ina = INA226(i2c, addr=addr)
 
         mid, did = ina.manufacturer_id(), ina.die_id()
         if mid != 0x5449 or did != 0x2260:

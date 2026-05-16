@@ -1,5 +1,6 @@
 from machine import Pin
 import setup
+import time
 import INA226
 
 # Initialize output pins using GPIO numbers defined in setup
@@ -56,9 +57,32 @@ def commands(cmd):
             pin.off()
         print("All outputs OFF")
 
-    elif cmd == "READ INA":
-        print(INA226.lectura_INA())
+    elif cmd.startswith("READ INA"):
+            parts = cmd.split()
+            if len(parts) == 3:
+                # READ INA 0x40
+                try:
+                    addr = int(parts[2], 16)
+                except ValueError:
+                    print("ERROR: Invalid address format, use hex e.g. READ INA 0x40")
+                    return
+            else:
+                # READ INA  ← usa dirección por defecto 0x40
+                addr = 0x40
 
+            import sys
+            import select
+            print("Continuous read started. Send 'Q' to stop.")
+            while True:
+                print(INA226.lectura_INA(addr))
+                # Esperar 500 ms pero revisando stdin cada 50 ms
+                for _ in range(10):
+                    time.sleep_ms(50)
+                    if select.select([sys.stdin], [], [], 0)[0]:
+                        stop_cmd = sys.stdin.readline().strip().upper()
+                        if stop_cmd == "Q":
+                            print("Continuous read stopped.")
+                            return
     else:
         parts = cmd.split()
         if len(parts) == 2 and parts[0] in OUTPUTS and parts[1] in ("ON", "OFF"):
