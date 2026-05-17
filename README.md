@@ -19,16 +19,16 @@ The project is modularly designed, safely isolating the low-voltage logic contro
 * **Power Switching:** P-Channel Power MOSFET (IRF4905).
 * **Current/Voltage Monitoring:** INA226 (I2C) with an ultra-low shunt resistor.
 * **Isolation:** PC817 Optocoupler.
-* **Simulated Load:** 55W H4 Halogen Bulb (~5A draw).
+* **Simulated Load:** 120 Ohms Resistors. (in total 12 Resistors ~1.2A drawn).
 
 ---
 
 ## 📂 Repository Structure
 
-* 📁 `/firmware`: MicroPython scripts for the ESP32 (I2C sensor reading, PWM/Digital control).
-* 📁 `/software`: Python GUI application for remote monitoring and control.
-* 📁 `/hardware`: Circuit schematics, wiring diagrams, and LTspice simulations (`.asc`, `.model`).
-* 📁 `/docs`: Final Report, technical documentation and component datasheets (INA226, IRF4905, etc.).
+* `/firmware`: MicroPython scripts for the ESP32 (I2C sensor reading, PWM/Digital control).
+* `/software`: Python GUI application for remote monitoring and control.
+* `/hardware`: Circuit schematics, wiring diagrams, and LTspice simulations (`.asc`, `.model`).
+* `/docs`: Final Report, technical documentation and component datasheets (INA226, IRF4905, etc.).
 
 ---
 
