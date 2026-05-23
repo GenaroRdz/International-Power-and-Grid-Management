@@ -1,1 +1,2 @@
-Here we can add docs
+Here we can add documentation of used parts.
+
