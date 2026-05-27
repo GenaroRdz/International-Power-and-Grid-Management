@@ -1,0 +1,8 @@
+﻿Designator,Quantity,Value,Footprint,Package,MPN,DNP,Mount_Type,Description,KiLib_Generator,Sim.Pins
+"D1, D2, D3",3,LED,LED_D5.0mm,,,,tht,Light emitting diode,LED/THT,1=K 2=A
+"J1, J2, J3, J4, J5, J6",6,Conn_01x02,JWT_A3963_1x02_P3.96mm_Vertical,,,,tht,"Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)",,
+"Q1, Q2, Q3",3,IRF4905,TO-220-3_Vertical,,,,tht,"-74A Id, -55V Vds, Single P-Channel HEXFET Power MOSFET, 20mOhm Ron, TO-220AB",package/TO_SOT/THT,
+"R1, R10, R4, R5, R6, R9",6,330,R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal,,,,tht,Resistor,resistor/THT,
+"R11, R2, R7",3,10K,R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal,,,,tht,Resistor,resistor/THT,
+"R12, R3, R8",3,120,R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal,,,,tht,Resistor,resistor/THT,
+"U1, U2, U3",3,PC817,DIP-4_W7.62mm,,,,tht,"DC Optocoupler, Vce 35V, CTR 50-300%, DIP-4",package/DIP/legacy,

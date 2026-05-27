@@ -1,0 +1,173 @@
+(footprint "Untitled"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "LM2595"
+		(at 0 -0.5 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "49c985a5-2df0-494e-9330-cb87634fbce5")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "Untitled"
+		(at 0 1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "b19b615f-05f9-4613-bb9f-08b4e1bcaaf4")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "a3552775-6a70-4b53-b41a-6f42ce5d2c7d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "1f5406e1-826a-4d1a-adf2-0229ff1103d7")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -28 -15)
+		(end -25.5 -15)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "8b2c666c-f421-4756-9505-6e137f47f489")
+	)
+	(fp_line
+		(start -28 14.95)
+		(end -25.5 14.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "646e18dd-e520-402b-9385-a0263b17fbf5")
+	)
+	(fp_line
+		(start -25.5 -15)
+		(end -25.5 -17.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "fb32258d-b960-4fc0-8b72-12019200c5aa")
+	)
+	(fp_line
+		(start -25.5 17.45)
+		(end -25.5 14.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "704d7c8c-1621-4c2b-8ad7-9d6f27095ad5")
+	)
+	(fp_line
+		(start 25.45 -15)
+		(end 25.45 -17.5)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "c483cc53-ffb7-42d2-84dd-5010aaa54692")
+	)
+	(fp_line
+		(start 25.45 -15)
+		(end 27.95 -15)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b215e8c0-c3b3-4e70-99af-8611ed489180")
+	)
+	(fp_line
+		(start 25.45 14.95)
+		(end 27.95 14.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "1b997221-77d8-40cd-86da-936b8c906828")
+	)
+	(fp_line
+		(start 25.45 17.45)
+		(end 25.45 14.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "d19016cf-37b8-4230-9e20-bd0ebea51835")
+	)
+	(fp_rect
+		(start -28.028811 -17.50664)
+		(end 27.971189 17.49336)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "b8402e14-a3f2-4dab-8ff9-9abc86531760")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 2.5 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "9f680b3a-9701-457d-9f50-5e2b186cf5c7")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(embedded_fonts no)
+	(model "C:/Users/PC/Downloads/lm2596-6.snapshot.9/LM2596_Modelo_3D.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 0.0001)
+		)
+		(rotate
+			(xyz -0 -0 -0)
+		)
+	)
+)

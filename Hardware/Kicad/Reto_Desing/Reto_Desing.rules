@@ -1,0 +1,57 @@
+
+(rules PCB Reto_Desing.dsn
+  (snap_angle 
+    fortyfive_degree
+  )
+  (rule
+    (width 200.0)
+    (clearance 200.0)
+    (clearance 100.0 (type smd_to_turn_gap))
+    (clearance 50.0 (type smd))
+    (clearance 200.0 (type "kicad_default"))
+  )
+  (padstack "Via[0-1]_600:300_um"
+    (shape
+      (circle F.Cu 600.0 0.0 0.0)
+    )
+    (shape
+      (circle B.Cu 600.0 0.0 0.0)
+    )
+    (attach off)
+  )
+  (via 
+    "Via[0-1]_600:300_um" "Via[0-1]_600:300_um" default
+  )
+  (via 
+    "Via[0-1]_600:300_um-kicad_default" "Via[0-1]_600:300_um" "kicad_default"
+  )
+  (via_rule
+    default "Via[0-1]_600:300_um"
+  )
+  (via_rule
+    "kicad_default" "Via[0-1]_600:300_um-kicad_default"
+  )
+  (class default
+    (clearance_class default)
+    (via_rule default)
+    (rule
+      (width 200.0)
+    )
+    (circuit 
+      (use_layer F.Cu B.Cu)
+    )
+  )
+  (class "kicad_default"
+    "Net-(Q3-D)" /12V "Net-(Q1-D)" "/ECU_ACC" "Net-(R6-Pad2)" "Net-(D2-A)" "GND_12V" "GND_ECU"
+    "Net-(D3-A)" "Net-(D1-A)" "/ECU_BAT" "Net-(R1-Pad2)" "Net-(Q2-D)" "/ECU_IGN" "Net-(R10-Pad2)" "Net-(J4-Pin_1)"
+    "Net-(J4-Pin_2)" "Net-(J5-Pin_1)" "Net-(J5-Pin_2)" "Net-(J6-Pin_1)" "Net-(J6-Pin_2)"
+    (clearance_class "kicad_default")
+    (via_rule "kicad_default")
+    (rule
+      (width 200.0)
+    )
+    (circuit 
+      (use_layer F.Cu B.Cu)
+    )
+  )
+)

@@ -1,0 +1,173 @@
+(footprint "HY-M154"
+	(version 20260206)
+	(generator "pcbnew")
+	(generator_version "10.0")
+	(layer "F.Cu")
+	(property "Reference" "HY_M154"
+		(at 0 -0.5 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "a494d813-33bf-47e5-a691-1c3dc71d2bd7")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "HY-M154"
+		(at 0 1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "9542c058-c68b-470f-aa20-7fc953c5126d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "646a0db3-7174-46dd-b05d-aadd8085acad")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "445763cf-8ba9-4aab-b707-19ca9331c0ef")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr smd)
+	(duplicate_pad_numbers_are_jumpers no)
+	(fp_line
+		(start -20.05 -18.825)
+		(end -20.05 -15.975)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "cf0b6ce6-0a45-4945-b369-c732c37586bc")
+	)
+	(fp_line
+		(start -20.05 -15.95)
+		(end -23.7 -15.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "a7006ddb-2c5e-4220-ba12-db7659f381d5")
+	)
+	(fp_line
+		(start -20.05 16)
+		(end -23.7 16)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "65c5c594-c6e6-4f5a-840d-48882c8e3ce9")
+	)
+	(fp_line
+		(start -20.05 16.025)
+		(end -20.05 18.875)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "8aa6ee49-6dd4-4033-a434-1b71d7da7c9d")
+	)
+	(fp_line
+		(start 19.925 -18.8)
+		(end 19.925 -15.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b2d96c2b-c839-46dd-aa19-20c8c653468c")
+	)
+	(fp_line
+		(start 19.95 16.025)
+		(end 19.95 18.875)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "e3077fd9-13f5-477f-a144-a7d8aa10f190")
+	)
+	(fp_line
+		(start 23.6 -15.95)
+		(end 19.95 -15.95)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "7bbd5bf9-33b9-4e63-848d-ff6711aea76b")
+	)
+	(fp_line
+		(start 23.6 16)
+		(end 19.95 16)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(layer "F.SilkS")
+		(uuid "b240e267-7897-43f6-8380-38ed7918d9c5")
+	)
+	(fp_rect
+		(start -23.706292 -18.822884)
+		(end 23.593708 18.877116)
+		(stroke
+			(width 0.1)
+			(type solid)
+		)
+		(fill no)
+		(layer "F.SilkS")
+		(uuid "1150dc89-51fa-4ef1-a5a8-9991e0719324")
+	)
+	(fp_text user "${REFERENCE}"
+		(at 0 2.5 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "8c84e6a1-fa6c-480b-adeb-421162f55db2")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(embedded_fonts no)
+	(model "C:/Users/PC/Downloads/optocoupler-4-channel-1.snapshot.2/optocoupler 4 channel v4.step"
+		(offset
+			(xyz 0 0 0)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz 0 0 0)
+		)
+	)
+)
