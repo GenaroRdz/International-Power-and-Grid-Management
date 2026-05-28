@@ -109,6 +109,9 @@ class ECUSupplyController(tk.Tk):
 
         self._build_title(outer)
 
+        # ── CAMBIO: Anclamos la barra de estado primero ──
+        self._build_status_bar(outer)
+
         main = tk.Frame(outer, bg=PANEL, bd=0,
                         highlightbackground=BORDER, highlightthickness=1)
         main.pack(fill="both", expand=True, pady=(0, 12))
@@ -120,13 +123,12 @@ class ECUSupplyController(tk.Tk):
         self._build_channels(main, pad)
         self._build_separator(main)
         
-        # ── Osciloscopio Embebido ─────────────────────────────────────────────
+        # ── Osciloscopio Embebido ──
         self._scope_tab = ScopeTab(main, bg=PANEL) 
         self._scope_tab.pack(fill="both", expand=True, padx=18, pady=10)
 
         self._build_separator(main)
         self._build_global_buttons(main, pad)
-        self._build_status_bar(outer)
 
     def _build_title(self, parent):
         hdr = tk.Frame(parent, bg=BG)
@@ -296,7 +298,10 @@ class ECUSupplyController(tk.Tk):
     def _build_status_bar(self, parent):
         bar = tk.Frame(parent, bg="#0a0c0f",
                        highlightbackground=BORDER, highlightthickness=1)
-        bar.pack(fill="x")
+        
+        # ── CAMBIO: side="bottom" obliga a la barra a quedarse abajo ──
+        bar.pack(side="bottom", fill="x")
+        
         inner = tk.Frame(bar, bg="#0a0c0f", padx=14, pady=8)
         inner.pack(fill="x")
 
@@ -336,7 +341,6 @@ class ECUSupplyController(tk.Tk):
                  font=FONT_STATUS, fg=ACCENT_CYAN, bg="#0a0c0f").pack(side="right")
         tk.Label(inner, text="Σ CURR:", font=FONT_STATUS,
                  fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
-
     def _build_separator(self, parent):
         tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=14)
 
