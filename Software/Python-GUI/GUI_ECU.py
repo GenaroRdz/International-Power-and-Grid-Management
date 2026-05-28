@@ -1,5 +1,4 @@
 import tkinter as tk
-import tkinter.ttk as ttk
 from tkinter import messagebox
 import threading
 import time
@@ -32,7 +31,6 @@ MODES = [
     ("ACC",     ACCENT_CYAN),
     ("IGN",     LILA),
 ]
-
 
 # ── LED widget ────────────────────────────────────────────────────────────────
 class LED(tk.Canvas):
@@ -76,7 +74,15 @@ class ECUSupplyController(tk.Tk):
         super().__init__()
         self.title("ECU Supply Controller")
         self.configure(bg=BG)
-        self.resizable(False, False)
+        
+        # ── PANTALLA COMPLETA ─────────────────────────────────────────────────
+        try:
+            self.state('zoomed') # Maximizado en Windows
+        except tk.TclError:
+            self.attributes('-fullscreen', True) # Fullscreen en Linux/Mac
+        
+        # Tecla escape para salir de fullscreen si es necesario
+        self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
 
         self.esp32 = ESP32Connection()
         self.conn_state      = self.ST_DISCONNECTED
@@ -87,6 +93,10 @@ class ECUSupplyController(tk.Tk):
         self.connected   = False
 
         self.ch_states = [[False] * len(MODES) for _ in range(self.NUM_CHANNELS)]
+        
+        # ── Variables para sumatorias ─────────────────────────────────────────
+        self.current_vals = [0.0] * self.NUM_CHANNELS
+        self.power_vals   = [0.0] * self.NUM_CHANNELS
 
         self._build_ui()
         self._update_status_bar()
@@ -95,48 +105,28 @@ class ECUSupplyController(tk.Tk):
     # ── UI ────────────────────────────────────────────────────────────────────
     def _build_ui(self):
         outer = tk.Frame(self, bg=BG, padx=18, pady=18)
-        outer.pack()
+        outer.pack(fill="both", expand=True)
 
         self._build_title(outer)
 
-        # ── CAMBIO 1: Notebook con dos pestañas ───────────────────────────────
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Dark.TNotebook",
-                        background=BG, borderwidth=0)
-        style.configure("Dark.TNotebook.Tab",
-                        background=CARD, foreground=TEXT_SEC,
-                        font=("Courier New", 8, "bold"),
-                        padding=[14, 6])
-        style.map("Dark.TNotebook.Tab",
-                  background=[("selected", PANEL)],
-                  foreground=[("selected", ACCENT_BLUE)])
-
-        nb = ttk.Notebook(outer, style="Dark.TNotebook")
-        nb.pack(fill="both", expand=True, pady=(0, 12))
-
-        # Pestaña 1: Control (todo el contenido original va aquí)
-        ctrl = tk.Frame(nb, bg=BG)
-        nb.add(ctrl, text="  ⬡  CONTROL  ")
-
-        # Pestaña 2: Osciloscopio
-        self._scope_tab = ScopeTab(nb)
-        nb.add(self._scope_tab, text="  📡  LIVE SCOPE  ")
-        # ─────────────────────────────────────────────────────────────────────
-
-        main = tk.Frame(ctrl, bg=PANEL, bd=0,
+        main = tk.Frame(outer, bg=PANEL, bd=0,
                         highlightbackground=BORDER, highlightthickness=1)
-        main.pack(fill="x", pady=(0, 12))
+        main.pack(fill="both", expand=True, pady=(0, 12))
 
         pad = dict(padx=18, pady=14)
+        
         self._build_init_row(main, pad)
         self._build_separator(main)
         self._build_channels(main, pad)
         self._build_separator(main)
-        self._build_readings(main, pad)
+        
+        # ── Osciloscopio Embebido ─────────────────────────────────────────────
+        self._scope_tab = ScopeTab(main, bg=PANEL) 
+        self._scope_tab.pack(fill="both", expand=True, padx=18, pady=10)
+
         self._build_separator(main)
         self._build_global_buttons(main, pad)
-        self._build_status_bar(ctrl)
+        self._build_status_bar(outer)
 
     def _build_title(self, parent):
         hdr = tk.Frame(parent, bg=BG)
@@ -263,103 +253,27 @@ class ECUSupplyController(tk.Tk):
             self.mode_leds.append(ch_mode_leds)
             self.mode_toggle_btns.append(ch_mode_tog_btns)
 
-    # ── Readings row (Voltage / Current / Power) ──────────────────────────────
-    def _build_readings(self, parent, pad):
-        tk.Label(parent, text="CHANNEL READINGS",
-                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(
-            anchor="w", padx=18, pady=(4, 0))
-
-        grid = tk.Frame(parent, bg=PANEL)
-        grid.pack(fill="x", **pad)
-
-        ch_colors = [ACCENT_BLUE, ACCENT_CYAN, GREEN, ORANGE]
-
-        self.voltage_vars = []
-        self.current_vars = []
-        self.power_vars   = []
-
-        all_card = tk.Frame(grid, bg=CARD,
-                            highlightbackground=BORDER, highlightthickness=1,
-                            padx=10, pady=10)
-        all_card.grid(row=0, column=0, padx=5, sticky="nsew")
-        grid.columnconfigure(0, weight=1)
-
-        tk.Label(all_card, text="ALL  Σ", font=FONT_CH,
-                 fg=GREEN, bg=CARD).pack(pady=(0, 6))
-
-        self.all_voltage_var = tk.StringVar(value="0.00 V")
-        self.all_current_var = tk.StringVar(value="0.00 A")
-        self.all_power_var   = tk.StringVar(value="0.00 W")
-
-        self._build_reading_row(all_card, "VOLT", ACCENT_BLUE, self.all_voltage_var)
-        self._build_reading_row(all_card, "CURR", ACCENT_CYAN, self.all_current_var)
-        self._build_reading_row(all_card, "PWR",  LILA,        self.all_power_var)
-
-        for ch in range(self.NUM_CHANNELS):
-            col = ch + 1
-            card = tk.Frame(grid, bg=CARD,
-                            highlightbackground=BORDER, highlightthickness=1,
-                            padx=10, pady=10)
-            card.grid(row=0, column=col, padx=5, sticky="nsew")
-            grid.columnconfigure(col, weight=1)
-
-            tk.Label(card, text=f"CH {ch+1:02d}", font=FONT_CH,
-                     fg=ch_colors[ch], bg=CARD).pack(pady=(0, 6))
-
-            v_var = tk.StringVar(value="0.00 V")
-            c_var = tk.StringVar(value="0.00 A")
-            p_var = tk.StringVar(value="0.00 W")
-
-            self.voltage_vars.append(v_var)
-            self.current_vars.append(c_var)
-            self.power_vars.append(p_var)
-
-            self._build_reading_row(card, "VOLT", ACCENT_BLUE, v_var)
-            self._build_reading_row(card, "CURR", ACCENT_CYAN, c_var)
-            self._build_reading_row(card, "PWR",  LILA,        p_var)
-
-    def _build_reading_row(self, parent, label, color, var):
-        row_f = tk.Frame(parent, bg=CARD)
-        row_f.pack(fill="x", pady=3)
-
-        LED(row_f, size=10, bg_color=CARD).pack(side="left", padx=(0, 4))
-
-        tk.Label(row_f, text=label, font=FONT_MODE,
-                 fg=color, bg=CARD, width=7,
-                 anchor="w").pack(side="left", padx=(0, 6))
-
-        tk.Label(row_f, textvariable=var, font=FONT_MODE,
-                 fg=TEXT_SEC, bg=CARD, anchor="e").pack(side="right")
-
     def update_reading(self, ch, voltage, current, power):
-        """Call this (via self.after(0, ...) from worker threads) when new
-        measurements arrive for a specific channel."""
-        self.voltage_vars[ch].set(f"{voltage:.2f} V")
-        self.current_vars[ch].set(f"{current:.2f} A")
-        self.power_vars[ch].set(f"{power:.2f} W")
-        self._refresh_all_readings()
-        # ── CAMBIO 2: push datos al scope ─────────────────────────────────────
+        """Envía los datos a las gráficas y actualiza sumatorias globales."""
         self._scope_tab.push(ch, voltage, current, power)
-
-    def _refresh_all_readings(self):
-        total_v = total_c = total_p = 0.0
-        for ch in range(self.NUM_CHANNELS):
-            try:
-                total_v += float(self.voltage_vars[ch].get().split()[0])
-                total_c += float(self.current_vars[ch].get().split()[0])
-                total_p += float(self.power_vars[ch].get().split()[0])
-            except (ValueError, IndexError):
-                pass
-        self.all_voltage_var.set(f"{total_v:.2f} V")
-        self.all_current_var.set(f"{total_c:.2f} A")
-        self.all_power_var.set(f"{total_p:.2f} W")
+        
+        self.current_vals[ch] = current
+        self.power_vals[ch]   = power
+        
+        tot_c = sum(self.current_vals)
+        tot_p = sum(self.power_vals)
+        
+        self.total_curr_var.set(f"{tot_c:.2f} A")
+        self.total_pwr_var.set(f"{tot_p:.2f} W")
 
     def _reset_readings(self):
-        for ch in range(self.NUM_CHANNELS):
-            self.voltage_vars[ch].set("0.00 V")
-            self.current_vars[ch].set("0.00 A")
-            self.power_vars[ch].set("0.00 W")
-        self._refresh_all_readings()
+        """Limpia los buffers de las gráficas y sumatorias."""
+        self._scope_tab.reset_buffers()
+        
+        self.current_vals = [0.0] * self.NUM_CHANNELS
+        self.power_vals   = [0.0] * self.NUM_CHANNELS
+        self.total_curr_var.set("0.00 A")
+        self.total_pwr_var.set("0.00 W")
 
     def _build_global_buttons(self, parent, pad):
         row = tk.Frame(parent, bg=PANEL)
@@ -386,6 +300,7 @@ class ECUSupplyController(tk.Tk):
         inner = tk.Frame(bar, bg="#0a0c0f", padx=14, pady=8)
         inner.pack(fill="x")
 
+        # Lado Izquierdo
         tk.Label(inner, text="⬡", font=("Courier New", 11),
                  fg=ACCENT_BLUE, bg="#0a0c0f").pack(side="left", padx=(0, 6))
         tk.Label(inner, text="MICROCHIP STATUS:", font=FONT_STATUS,
@@ -399,11 +314,28 @@ class ECUSupplyController(tk.Tk):
                                    font=FONT_STATUS, fg=RED, bg="#0a0c0f")
         self.status_lbl.pack(side="left")
 
-        tk.Label(inner, text="ACTIVE OUTPUTS:", font=FONT_STATUS,
-                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
+        # Lado Derecho (Se apilan de derecha a izquierda)
         self.active_ch_var = tk.StringVar(value="0 / 12")
         tk.Label(inner, textvariable=self.active_ch_var,
                  font=FONT_STATUS, fg=TEXT_SEC, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="ACTIVE OUTPUTS:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
+        
+        tk.Frame(inner, width=20, bg="#0a0c0f").pack(side="right") # Separador invisible
+        
+        self.total_pwr_var = tk.StringVar(value="0.00 W")
+        tk.Label(inner, textvariable=self.total_pwr_var,
+                 font=FONT_STATUS, fg=LILA, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="Σ PWR:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
+
+        tk.Frame(inner, width=15, bg="#0a0c0f").pack(side="right") # Separador invisible
+
+        self.total_curr_var = tk.StringVar(value="0.00 A")
+        tk.Label(inner, textvariable=self.total_curr_var,
+                 font=FONT_STATUS, fg=ACCENT_CYAN, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="Σ CURR:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
 
     def _build_separator(self, parent):
         tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=14)
@@ -503,7 +435,6 @@ class ECUSupplyController(tk.Tk):
         self._shutdown_link()
 
     def _set_conn_state(self, state):
-        """Single place that updates connection UI. Main thread only."""
         self.conn_state = state
         self.connected  = (state == self.ST_CONNECTED)
 
@@ -521,7 +452,6 @@ class ECUSupplyController(tk.Tk):
             self.conn_label.configure(text="DEVICE NOT CONNECTED", fg=TEXT_SEC)
 
         self._update_status_bar()
-        # ── CAMBIO 3: notifica estado de conexión al scope ────────────────────
         self._scope_tab.set_connected(self.connected)
 
     # ── Reset ─────────────────────────────────────────────────────────────────
@@ -533,7 +463,6 @@ class ECUSupplyController(tk.Tk):
         self._shutdown_link()
 
     def _shutdown_link(self):
-        """Send *RST, close port, clear all GUI state. Safe to call anytime."""
         self._want_connected = False
         if self.connected:
             try:
@@ -591,69 +520,19 @@ class ECUSupplyController(tk.Tk):
         self._set_toggle(self.mode_toggle_btns[ch][m_idx], on)
 
         if ch == 0 and m_idx == 0 and on:
-            print("CH1 BATTERY is ON")
             self.esp32.send("BAT1 on")
         if ch == 0 and m_idx == 0 and not on:
-            print("CH1 BATTERY is OFF")
             self.esp32.send("BAT1 off")
-
         if ch == 0 and m_idx == 1 and on:
-            print("CH1 ACC is ON")
             self.esp32.send("ACC1 on")
         if ch == 0 and m_idx == 1 and not on:
             self.esp32.send("ACC1 off")
-
         if ch == 0 and m_idx == 2 and on:
-            print("CH1 IGN is ON")
             self.esp32.send("IGN1 on")
         if ch == 0 and m_idx == 2 and not on:
             self.esp32.send("IGN1 off")
-
-        if ch == 1 and m_idx == 0 and on:
-            print("CH2 BATTERY is on")
         if ch == 1 and m_idx == 0 and not on:
-            print("CH2 BATTERY is off")
             self.esp32.send("IGN1 off")
-
-        if ch == 1 and m_idx == 1 and on:
-            print("CH2 ACC is ON")
-        if ch == 1 and m_idx == 1 and not on:
-            print("CH2 ACC is OFF")
-
-        if ch == 1 and m_idx == 2 and on:
-            print("CH2 IGN is ON")
-        if ch == 1 and m_idx == 2 and not on:
-            print("CH2 IGN is OFF")
-
-        if ch == 2 and m_idx == 0 and on:
-            print("CH3 BATTERY is OFF")
-        if ch == 2 and m_idx == 0 and not on:
-            print("CH3 BATTERY is OFF")
-
-        if ch == 2 and m_idx == 1 and on:
-            print("CH3 ACC is ON")
-        if ch == 2 and m_idx == 1 and not on:
-            print("CH3 ACC is OFF")
-
-        if ch == 2 and m_idx == 2 and on:
-            print("CH3 IGN is ON")
-        if ch == 2 and m_idx == 2 and not on:
-            print("CH3 IGN is OFF")
-
-        if ch == 3 and m_idx == 0 and on:
-            print("CH4 BATTERY is ON")
-        if ch == 3 and m_idx == 0 and not on:
-            print("CH4 BATTERY is OFF")
-
-        if ch == 3 and m_idx == 1 and on:
-            print("CH4 ACC is ON")
-        if ch == 3 and m_idx == 1 and not on:
-            print("CH4 ACC is OFF")
-
-        if ch == 3 and m_idx == 2 and on:
-            print("CH4 IGN is ON")
-        if ch == 3 and m_idx == 2 and not on:
-            print("CH4 IGN is OFF")
 
     def _update_ch_led(self, ch):
         ch_colors = [ACCENT_BLUE, ACCENT_CYAN, GREEN, ORANGE]
@@ -830,7 +709,6 @@ class ECUSupplyController(tk.Tk):
         except Exception:
             pass
         super().destroy()
-
 
 if __name__ == "__main__":
     app = ECUSupplyController()
