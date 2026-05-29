@@ -322,7 +322,6 @@ def connect_real_bus(out_queue: queue.Queue):
 # ============================================================================
 class CanMonitor(tk.Frame):
     def __init__(self, parent, **kwargs):
-        # Acepta parent e inicializa como Frame
         kwargs.setdefault("bg", COLORS["bg"])
         super().__init__(parent, **kwargs)
         
@@ -871,6 +870,35 @@ class CanMonitor(tk.Frame):
             self.filter_btn.config(text=f"Filter ({n}) ▾", fg=COLORS["tx"])
         else:
             self.filter_btn.config(text="Filter ▾", fg=COLORS["text"])
+
+    def _matches_unknown(self, f: CanFrame) -> bool:
+        return f.can_id not in MESSAGES
+
+    def _matches_filter(self, f: CanFrame) -> bool:
+        fs = self.filter_state
+        if fs["ids"] and not ((f.can_id in fs["ids"]) or (-1 in fs["ids"] and f.can_id not in MESSAGES)): return False
+        if fs["sources"] and f.source not in fs["sources"]: return False
+        if fs["frame_type"] == "error" and not f.is_error: return False
+        if fs["frame_type"] == "data" and f.is_error: return False
+        if fs["text"]:
+            hay = (f"0x{f.can_id:03X} {f.name} {f.source} {','.join(f.destinations)} {' '.join(f'{name}={val}{unit}' for name, val, unit in f.decode())} {f.error_reason}").lower()
+            if fs["text"] not in hay: return False
+        return True
+
+    def _row_values(self, f: CanFrame):
+        ts = time.strftime("%H:%M:%S", time.localtime(f.timestamp))
+        ts += f".{int((f.timestamp % 1) * 1000):03d}"
+        id_str = f"0x{f.can_id:03X}"
+        data_hex = " ".join(f"{b:02X}" for b in f.data)
+        return (ts, id_str, f.name, f.source, ", ".join(f.destinations),
+                len(f.data), data_hex, f.summary())
+
+    def _row_tags(self, f: CanFrame, alt: bool):
+        if f.is_error:
+            return ("err",)
+        if f.can_id == 0x100:
+            return ("tx_cmd",)
+        return ("alt",) if alt else ()
 
     def _on_select(self, _event):
         sel = self.tree.selection()

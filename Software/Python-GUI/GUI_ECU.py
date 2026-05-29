@@ -1,11 +1,10 @@
 import tkinter as tk
-from tkinter import ttk
 from tkinter import messagebox
 import threading
 import time
+import queue
 from New_device_connection_2 import ESP32Connection
 from Scope_tab import ScopeTab
-from CAN_Monitor_V7 import CanMonitor  # <-- IMPORTAMOS EL CAN MONITOR
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BG          = "#0d0f12"
@@ -39,8 +38,10 @@ class LED(tk.Canvas):
     def __init__(self, parent, size=10, bg_color=CARD, **kw):
         super().__init__(parent, width=size, height=size,
                          bg=bg_color, highlightthickness=0, **kw)
-        self._oval = self.create_oval(1, 1, size-1, size-1, fill=TEXT_DIM, outline="")
-        self._glow = self.create_oval(3, 3, size-3, size-3, fill="", outline="")
+        self._oval = self.create_oval(1, 1, size-1, size-1,
+                                      fill=TEXT_DIM, outline="")
+        self._glow = self.create_oval(3, 3, size-3, size-3,
+                                      fill="", outline="")
 
     def set(self, color=None, on=False):
         if on and color:
@@ -81,52 +82,47 @@ class ECUSupplyController(tk.Tk):
         except tk.TclError:
             self.attributes('-fullscreen', True) # Fullscreen en Linux/Mac
         
+        # Tecla escape para salir de fullscreen si es necesario
         self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
 
         self.esp32 = ESP32Connection()
+        self.esp32.on_data = self._on_serial_line   # INA stream -> graphs
         self.conn_state      = self.ST_DISCONNECTED
         self._want_connected = False
         self._worker_stop    = threading.Event()
 
         self.initialized = False
         self.connected   = False
+        self._init_time  = 0.0          # when *INIT was last sent (race guard)
+
+        # Readings arrive on the serial reader thread; the reader puts them
+        # here and the main thread drains them (tkinter is touched only on the
+        # main thread).
+        self._ina_queue = queue.Queue()
 
         self.ch_states = [[False] * len(MODES) for _ in range(self.NUM_CHANNELS)]
         
+        # ── Variables para sumatorias ─────────────────────────────────────────
         self.current_vals = [0.0] * self.NUM_CHANNELS
         self.power_vals   = [0.0] * self.NUM_CHANNELS
 
         self._build_ui()
         self._update_status_bar()
         self._start_worker()
+        self._poll_ina_queue()          # start draining sensor readings
 
     # ── UI ────────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # ── Estilos para el Notebook ──
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Dark.TNotebook", background=BG, borderwidth=0)
-        style.configure("Dark.TNotebook.Tab", background=CARD, foreground=TEXT_SEC, 
-                        font=("Courier New", 10, "bold"), padding=[14, 6])
-        style.map("Dark.TNotebook.Tab", background=[("selected", PANEL)], 
-                  foreground=[("selected", ACCENT_BLUE)])
-
-        self.notebook = ttk.Notebook(self, style="Dark.TNotebook")
-        self.notebook.pack(fill="both", expand=True)
-
-        self.tab_main = tk.Frame(self.notebook, bg=BG)
-        self.notebook.add(self.tab_main, text="  ⬡ CONTROL & SCOPE  ")
-
-        self.tab_can = tk.Frame(self.notebook, bg=BG)
-        self.notebook.add(self.tab_can, text="  🌐 CAN BUS  ")
-
-        outer = tk.Frame(self.tab_main, bg=BG, padx=18, pady=18)
+        outer = tk.Frame(self, bg=BG, padx=18, pady=18)
         outer.pack(fill="both", expand=True)
 
         self._build_title(outer)
+
+        # ── CAMBIO: Anclamos la barra de estado primero ──
         self._build_status_bar(outer)
 
-        main = tk.Frame(outer, bg=PANEL, bd=0, highlightbackground=BORDER, highlightthickness=1)
+        main = tk.Frame(outer, bg=PANEL, bd=0,
+                        highlightbackground=BORDER, highlightthickness=1)
         main.pack(fill="both", expand=True, pady=(0, 12))
 
         pad = dict(padx=18, pady=14)
@@ -134,73 +130,101 @@ class ECUSupplyController(tk.Tk):
         self._build_init_row(main, pad)
         self._build_separator(main)
         self._build_channels(main, pad)
-        
-        # ── SOLUCIÓN: Empacar botones globales al fondo ANTES del osciloscopio ──
-        bottom_area = tk.Frame(main, bg=PANEL)
-        bottom_area.pack(side="bottom", fill="x")
-        self._build_separator(bottom_area)
-        self._build_global_buttons(bottom_area, pad)
-
-        # ── Ahora sí, el osciloscopio toma el espacio restante ──
         self._build_separator(main)
+        
+        # ── Osciloscopio Embebido ──
         self._scope_tab = ScopeTab(main, bg=PANEL) 
         self._scope_tab.pack(fill="both", expand=True, padx=18, pady=10)
 
-        # ── Monitor CAN Bus ──
-        self.can_monitor = CanMonitor(self.tab_can)
-        self.can_monitor.pack(fill="both", expand=True)
-
+        self._build_separator(main)
+        self._build_global_buttons(main, pad)
 
     def _build_title(self, parent):
         hdr = tk.Frame(parent, bg=BG)
         hdr.pack(fill="x", pady=(0, 14))
-        tk.Label(hdr, text="⬡ ECU SUPPLY CONTROLLER", font=FONT_TITLE, fg=ACCENT_BLUE, bg=BG).pack(side="left")
-        tk.Label(hdr, text=" v2.1 ", font=FONT_LABEL, fg=ACCENT_CYAN, bg=BG, relief="solid", bd=1, highlightbackground=ACCENT_CYAN, highlightthickness=1).pack(side="right", padx=4, pady=6)
+        tk.Label(hdr, text="⬡ ECU SUPPLY CONTROLLER",
+                 font=FONT_TITLE, fg=ACCENT_BLUE, bg=BG).pack(side="left")
+        tk.Label(hdr, text=" v2.1 ", font=FONT_LABEL,
+                 fg=ACCENT_CYAN, bg=BG, relief="solid", bd=1,
+                 highlightbackground=ACCENT_CYAN,
+                 highlightthickness=1).pack(side="right", padx=4, pady=6)
 
     def _build_init_row(self, parent, pad):
         row = tk.Frame(parent, bg=PANEL)
         row.pack(fill="x", **pad)
-        self.init_btn = self._make_btn(row, "⚡  INIT", ACCENT_BLUE, self._do_init, width=12)
+
+        self.init_btn = self._make_btn(row, "⚡  INIT", ACCENT_BLUE,
+                                       self._do_init, width=12)
         self.init_btn.pack(side="left", padx=(0, 14))
+
         self.init_led = LED(row, size=14, bg_color=PANEL)
         self.init_led.pack(side="left", padx=(0, 2))
-        tk.Label(row, text="INITIALIZED", font=FONT_LABEL, fg=TEXT_SEC, bg=PANEL).pack(side="left", padx=(0, 24))
+
+        tk.Label(row, text="INITIALIZED", font=FONT_LABEL,
+                 fg=TEXT_SEC, bg=PANEL).pack(side="left", padx=(0, 24))
+
         self.conn_led = LED(row, size=14, bg_color=PANEL)
         self.conn_led.pack(side="left", padx=(0, 5))
-        self.conn_label = tk.Label(row, text="DEVICE NOT CONNECTED", font=FONT_LABEL, fg=TEXT_SEC, bg=PANEL)
+        self.conn_label = tk.Label(row, text="DEVICE NOT CONNECTED",
+                                   font=FONT_LABEL, fg=TEXT_SEC, bg=PANEL)
         self.conn_label.pack(side="left")
-        self.connect_button = self._make_btn(row, "Connect", GREEN, self._connect, width=14)
+
+        self.connect_button = self._make_btn(row, "Connect", GREEN,
+                                             self._connect, width=14)
         self.connect_button.pack(side="left", padx=(100, 8))
-        self.disconnect_button = self._make_btn(row, "Disconnect", RED, self._disconnect, width=14)
+
+        self.disconnect_button = self._make_btn(row, "Disconnect", RED,
+                                                self._disconnect, width=14)
         self.disconnect_button.pack(side="left", padx=(5, 8))
 
     def _build_channels(self, parent, pad):
-        tk.Label(parent, text="CHANNEL OUTPUTS", font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(anchor="w", padx=18, pady=(4, 0))
+        tk.Label(parent, text="CHANNEL OUTPUTS",
+                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(
+            anchor="w", padx=18, pady=(4, 0))
+
         grid = tk.Frame(parent, bg=PANEL)
         grid.pack(fill="x", **pad)
+
         ch_colors = [ACCENT_BLUE, ACCENT_CYAN, GREEN, ORANGE]
 
-        self.ch_leds, self.ch_master_btns, self.mode_leds, self.mode_toggle_btns, self.all_mode_leds, self.all_toggle_btns = [], [], [], [], [], []
+        self.ch_leds           = []
+        self.ch_master_btns    = []
+        self.mode_leds         = []
+        self.mode_toggle_btns  = []
+        self.all_mode_leds     = []
+        self.all_toggle_btns   = []
 
-        all_card = tk.Frame(grid, bg=CARD, highlightbackground=BORDER, highlightthickness=1, padx=10, pady=10)
+        all_card = tk.Frame(grid, bg=CARD,
+                            highlightbackground=BORDER, highlightthickness=1,
+                            padx=10, pady=10)
         all_card.grid(row=0, column=0, padx=5, sticky="nsew")
         grid.columnconfigure(0, weight=1)
-        tk.Label(all_card, text="ALL", font=FONT_CH, fg=GREEN, bg=CARD).pack(pady=(0, 6))
+
+        tk.Label(all_card, text="ALL", font=FONT_CH,
+                 fg=GREEN, bg=CARD).pack(pady=(0, 6))
 
         for m_idx, (m_label, m_color) in enumerate(MODES):
             row_f = tk.Frame(all_card, bg=CARD)
             row_f.pack(fill="x", pady=3)
+
             led = LED(row_f, size=10, bg_color=CARD)
             led.pack(side="left", padx=(0, 4))
             self.all_mode_leds.append(led)
-            tk.Label(row_f, text=m_label, font=FONT_MODE, fg=m_color, bg=CARD, width=7, anchor="w").pack(side="left", padx=(0, 6))
-            btn = self._make_toggle_btn(row_f, lambda mi=m_idx: self._all_mode_toggle(mi))
+
+            tk.Label(row_f, text=m_label, font=FONT_MODE,
+                     fg=m_color, bg=CARD, width=7,
+                     anchor="w").pack(side="left", padx=(0, 6))
+
+            btn = self._make_toggle_btn(
+                row_f, lambda mi=m_idx: self._all_mode_toggle(mi))
             btn.pack(side="right")
             self.all_toggle_btns.append(btn)
 
         for ch in range(self.NUM_CHANNELS):
             col = ch + 1
-            card = tk.Frame(grid, bg=CARD, highlightbackground=BORDER, highlightthickness=1, padx=10, pady=10)
+            card = tk.Frame(grid, bg=CARD,
+                            highlightbackground=BORDER, highlightthickness=1,
+                            padx=10, pady=10)
             card.grid(row=0, column=col, padx=5, sticky="nsew")
             grid.columnconfigure(col, weight=1)
 
@@ -209,20 +233,31 @@ class ECUSupplyController(tk.Tk):
             ch_led = LED(hdr, size=12, bg_color=CARD)
             ch_led.pack(side="left", padx=(0, 5))
             self.ch_leds.append(ch_led)
-            tk.Label(hdr, text=f"CH {ch+1:02d}", font=FONT_CH, fg=ch_colors[ch], bg=CARD).pack(side="left")
-            master_btn = self._make_toggle_btn(hdr, lambda c=ch: self._ch_master_toggle(c))
+            tk.Label(hdr, text=f"CH {ch+1:02d}", font=FONT_CH,
+                     fg=ch_colors[ch], bg=CARD).pack(side="left")
+
+            master_btn = self._make_toggle_btn(
+                hdr, lambda c=ch: self._ch_master_toggle(c))
             master_btn.pack(side="right")
             self.ch_master_btns.append(master_btn)
 
-            ch_mode_leds, ch_mode_tog_btns = [], []
+            ch_mode_leds      = []
+            ch_mode_tog_btns  = []
+
             for m_idx, (m_label, m_color) in enumerate(MODES):
                 row_f = tk.Frame(card, bg=CARD)
                 row_f.pack(fill="x", pady=3)
+
                 led = LED(row_f, size=10, bg_color=CARD)
                 led.pack(side="left", padx=(0, 4))
                 ch_mode_leds.append(led)
-                tk.Label(row_f, text=m_label, font=FONT_MODE, fg=m_color, bg=CARD, width=7, anchor="w").pack(side="left", padx=(0, 6))
-                btn = self._make_toggle_btn(row_f, lambda c=ch, mi=m_idx: self._ch_mode_toggle(c, mi))
+
+                tk.Label(row_f, text=m_label, font=FONT_MODE,
+                         fg=m_color, bg=CARD, width=7,
+                         anchor="w").pack(side="left", padx=(0, 6))
+
+                btn = self._make_toggle_btn(
+                    row_f, lambda c=ch, mi=m_idx: self._ch_mode_toggle(c, mi))
                 btn.pack(side="right")
                 ch_mode_tog_btns.append(btn)
 
@@ -230,15 +265,58 @@ class ECUSupplyController(tk.Tk):
             self.mode_toggle_btns.append(ch_mode_tog_btns)
 
     def update_reading(self, ch, voltage, current, power):
+        """Envía los datos a las gráficas y actualiza sumatorias globales."""
         self._scope_tab.push(ch, voltage, current, power)
+        
         self.current_vals[ch] = current
         self.power_vals[ch]   = power
         
-        self.total_curr_var.set(f"{sum(self.current_vals):.2f} A")
-        self.total_pwr_var.set(f"{sum(self.power_vals):.2f} W")
+        tot_c = sum(self.current_vals)
+        tot_p = sum(self.power_vals)
+        
+        self.total_curr_var.set(f"{tot_c:.2f} A")
+        self.total_pwr_var.set(f"{tot_p:.2f} W")
+
+    # ── INA226 stream from the ESP32 ──────────────────────────────────────────
+    def _on_serial_line(self, line):
+        """Called from the serial reader THREAD for each 'INA,...' line.
+
+        It must not touch tkinter, so it only parses and queues the numbers.
+        Line format: 'INA,v1,i1,p1,v2,i2,p2,v3,i3,p3,v4,i4,p4' (V, A, W).
+        """
+        if not line.startswith("INA,"):
+            return
+        nums = [self._safe_float(p) for p in line.split(",")[1:]]
+        self._ina_queue.put(nums)
+
+    def _poll_ina_queue(self):
+        """Runs on the MAIN thread: drains queued readings into the graphs."""
+        try:
+            while True:
+                nums = self._ina_queue.get_nowait()
+                self._apply_readings(nums)
+        except queue.Empty:
+            pass
+        self.after(50, self._poll_ina_queue)
+
+    def _apply_readings(self, nums):
+        for ch in range(self.NUM_CHANNELS):
+            base = ch * 3                       # 3 values per channel
+            if base + 2 < len(nums):
+                self.update_reading(ch, nums[base], nums[base + 1], nums[base + 2])
+
+    @staticmethod
+    def _safe_float(s):
+        try:
+            x = float(s)
+            return 0.0 if x != x else x         # x != x is True only for NaN
+        except ValueError:
+            return 0.0
 
     def _reset_readings(self):
+        """Limpia los buffers de las gráficas y sumatorias."""
         self._scope_tab.reset_buffers()
+        
         self.current_vals = [0.0] * self.NUM_CHANNELS
         self.power_vals   = [0.0] * self.NUM_CHANNELS
         self.total_curr_var.set("0.00 A")
@@ -247,97 +325,159 @@ class ECUSupplyController(tk.Tk):
     def _build_global_buttons(self, parent, pad):
         row = tk.Frame(parent, bg=PANEL)
         row.pack(fill="x", **pad)
-        self.all_on_btn = self._make_btn(row, "▶  ALL ON", GREEN, self._all_on, width=14)
+
+        self.all_on_btn = self._make_btn(row, "▶  ALL ON", GREEN,
+                                         self._all_on, width=14)
         self.all_on_btn.pack(side="left", padx=(0, 8))
-        self.all_off_btn = self._make_btn(row, "■  ALL OFF", RED, self._all_off, width=14)
+
+        self.all_off_btn = self._make_btn(row, "■  ALL OFF", RED,
+                                          self._all_off, width=14)
         self.all_off_btn.pack(side="left", padx=(0, 8))
+
         tk.Frame(row, bg=PANEL).pack(side="left", expand=True)
-        self.reset_btn = self._make_btn(row, "↺  RESET", YELLOW, self._do_reset, width=12)
+
+        self.reset_btn = self._make_btn(row, "↺  RESET", YELLOW,
+                                        self._do_reset, width=12)
         self.reset_btn.pack(side="right")
 
     def _build_status_bar(self, parent):
-        bar = tk.Frame(parent, bg="#0a0c0f", highlightbackground=BORDER, highlightthickness=1)
+        bar = tk.Frame(parent, bg="#0a0c0f",
+                       highlightbackground=BORDER, highlightthickness=1)
+        
+        # ── CAMBIO: side="bottom" obliga a la barra a quedarse abajo ──
         bar.pack(side="bottom", fill="x")
+        
         inner = tk.Frame(bar, bg="#0a0c0f", padx=14, pady=8)
         inner.pack(fill="x")
 
-        tk.Label(inner, text="⬡", font=("Courier New", 11), fg=ACCENT_BLUE, bg="#0a0c0f").pack(side="left", padx=(0, 6))
-        tk.Label(inner, text="MICROCHIP STATUS:", font=FONT_STATUS, fg=TEXT_DIM, bg="#0a0c0f").pack(side="left")
+        # Lado Izquierdo
+        tk.Label(inner, text="⬡", font=("Courier New", 11),
+                 fg=ACCENT_BLUE, bg="#0a0c0f").pack(side="left", padx=(0, 6))
+        tk.Label(inner, text="MICROCHIP STATUS:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="left")
 
         self.status_led = LED(inner, size=10, bg_color="#0a0c0f")
         self.status_led.pack(side="left", padx=8)
 
         self.status_var = tk.StringVar(value="NOT INITIALIZED")
-        self.status_lbl = tk.Label(inner, textvariable=self.status_var, font=FONT_STATUS, fg=RED, bg="#0a0c0f")
+        self.status_lbl = tk.Label(inner, textvariable=self.status_var,
+                                   font=FONT_STATUS, fg=RED, bg="#0a0c0f")
         self.status_lbl.pack(side="left")
 
+        # Lado Derecho (Se apilan de derecha a izquierda)
         self.active_ch_var = tk.StringVar(value="0 / 12")
-        tk.Label(inner, textvariable=self.active_ch_var, font=FONT_STATUS, fg=TEXT_SEC, bg="#0a0c0f").pack(side="right")
-        tk.Label(inner, text="ACTIVE OUTPUTS:", font=FONT_STATUS, fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
+        tk.Label(inner, textvariable=self.active_ch_var,
+                 font=FONT_STATUS, fg=TEXT_SEC, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="ACTIVE OUTPUTS:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
         
-        tk.Frame(inner, width=20, bg="#0a0c0f").pack(side="right")
+        tk.Frame(inner, width=20, bg="#0a0c0f").pack(side="right") # Separador invisible
+        
         self.total_pwr_var = tk.StringVar(value="0.00 W")
-        tk.Label(inner, textvariable=self.total_pwr_var, font=FONT_STATUS, fg=LILA, bg="#0a0c0f").pack(side="right")
-        tk.Label(inner, text="Σ PWR:", font=FONT_STATUS, fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
+        tk.Label(inner, textvariable=self.total_pwr_var,
+                 font=FONT_STATUS, fg=LILA, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="Σ PWR:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
 
-        tk.Frame(inner, width=15, bg="#0a0c0f").pack(side="right")
+        tk.Frame(inner, width=15, bg="#0a0c0f").pack(side="right") # Separador invisible
+
         self.total_curr_var = tk.StringVar(value="0.00 A")
-        tk.Label(inner, textvariable=self.total_curr_var, font=FONT_STATUS, fg=ACCENT_CYAN, bg="#0a0c0f").pack(side="right")
-        tk.Label(inner, text="Σ CURR:", font=FONT_STATUS, fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
-
+        tk.Label(inner, textvariable=self.total_curr_var,
+                 font=FONT_STATUS, fg=ACCENT_CYAN, bg="#0a0c0f").pack(side="right")
+        tk.Label(inner, text="Σ CURR:", font=FONT_STATUS,
+                 fg=TEXT_DIM, bg="#0a0c0f").pack(side="right", padx=(0, 4))
     def _build_separator(self, parent):
         tk.Frame(parent, bg=BORDER, height=1).pack(fill="x", padx=14)
 
+    # ── Button factories ──────────────────────────────────────────────────────
     def _make_btn(self, parent, text, color, cmd, width=10):
-        btn = tk.Button(parent, text=text, command=cmd, font=FONT_BTN, width=width, fg=color, bg=CARD,
-                        activeforeground=BG, activebackground=color, relief="flat", bd=0, highlightbackground=color, highlightthickness=1, cursor="hand2", pady=6)
+        btn = tk.Button(parent, text=text, command=cmd,
+                        font=FONT_BTN, width=width,
+                        fg=color, bg=CARD,
+                        activeforeground=BG, activebackground=color,
+                        relief="flat", bd=0,
+                        highlightbackground=color, highlightthickness=1,
+                        cursor="hand2", pady=6)
         btn.bind("<Enter>", lambda e, b=btn, c=color: b.configure(bg=c, fg=BG))
-        btn.bind("<Leave>", lambda e, b=btn, c=color: (b.configure(bg=CARD, fg=c) if str(b["state"]) != "disabled" else None))
+        btn.bind("<Leave>", lambda e, b=btn, c=color: (
+            b.configure(bg=CARD, fg=c) if str(b["state"]) != "disabled" else None))
         return btn
 
     def _make_toggle_btn(self, parent, cmd):
-        btn = tk.Button(parent, text="OFF", command=cmd, font=FONT_MODE, width=5, fg=RED, bg=CARD,
-                        activeforeground=BG, activebackground=GREEN, relief="flat", bd=0, highlightbackground=RED, highlightthickness=1, cursor="hand2", pady=2)
+        btn = tk.Button(parent, text="OFF", command=cmd,
+                        font=FONT_MODE, width=5,
+                        fg=RED, bg=CARD,
+                        activeforeground=BG, activebackground=GREEN,
+                        relief="flat", bd=0,
+                        highlightbackground=RED, highlightthickness=1,
+                        cursor="hand2", pady=2)
         btn._is_on = False
+
         def _enter(e, b=btn):
-            if str(b["state"]) == "disabled": return
+            if str(b["state"]) == "disabled":
+                return
             b.configure(bg=GREEN if b._is_on else RED, fg=BG)
+
         def _leave(e, b=btn):
-            if str(b["state"]) == "disabled": return
-            if b._is_on: b.configure(bg=GREEN, fg=BG)
-            else: b.configure(bg=CARD, fg=RED)
+            if str(b["state"]) == "disabled":
+                return
+            if b._is_on:
+                b.configure(bg=GREEN, fg=BG)
+            else:
+                b.configure(bg=CARD, fg=RED)
+
         btn.bind("<Enter>", _enter)
         btn.bind("<Leave>", _leave)
         return btn
 
     def _set_toggle(self, btn, on):
         btn._is_on = on
-        if on: btn.configure(text="ON", fg=BG, bg=GREEN, highlightbackground=GREEN)
-        else: btn.configure(text="OFF", fg=RED, bg=CARD, highlightbackground=RED)
+        if on:
+            btn.configure(text="ON", fg=BG, bg=GREEN,
+                          highlightbackground=GREEN)
+        else:
+            btn.configure(text="OFF", fg=RED, bg=CARD,
+                          highlightbackground=RED)
 
+    # ── Guard ─────────────────────────────────────────────────────────────────
     def _guard(self):
         if not self.connected:
-            messagebox.showwarning("Device Not Connected", "⚠ Device is not connected.\n\nPlease connect to the device.", parent=self)
+            messagebox.showwarning(
+                "Device Not Connected",
+                "⚠ Device is not connected.\n\n"
+                "Please connect to the device.", parent=self)
             return False
         if not self.initialized:
-            messagebox.showwarning("Device Not Initialized", "⚠  Device is not initialized.\n\nPlease press INIT first.", parent=self)
+            messagebox.showwarning(
+                "Device Not Initialized",
+                "⚠  Device is not initialized.\n\n"
+                "Please press INIT first.", parent=self)
             return False
         return True
 
+    # ── Init ──────────────────────────────────────────────────────────────────
     def _do_init(self):
-        if self.initialized: return
+        if self.initialized:
+            return
         if not self.connected:
-            messagebox.showwarning("Device Not Connected", "⚠ Connect to the device before initializing.", parent=self)
+            messagebox.showwarning(
+                "Device Not Connected",
+                "⚠ Connect to the device before initializing.",
+                parent=self)
             return
         self.esp32.send("*INIT")
         self.initialized = True
+        self._init_time  = time.time()   # start the reboot-detection grace window
         self.init_led.set(GREEN, on=True)
         self.init_btn.configure(fg=GREEN, highlightbackground=GREEN)
-        self.esp32.send("1")
+        self.esp32.send("INA_START")   # begin streaming INA readings to the graphs
         self._update_status_bar()
 
+    # ── Connect / Disconnect (user actions) ───────────────────────────────────
     def _connect(self):
-        if self.conn_state in (self.ST_CONNECTING, self.ST_CONNECTED, self.ST_RECONNECTING): return
+        if self.conn_state in (self.ST_CONNECTING, self.ST_CONNECTED,
+                               self.ST_RECONNECTING):
+            return
         self._want_connected = True
         self._set_conn_state(self.ST_CONNECTING)
 
@@ -364,8 +504,12 @@ class ECUSupplyController(tk.Tk):
         self._update_status_bar()
         self._scope_tab.set_connected(self.connected)
 
+    # ── Reset ─────────────────────────────────────────────────────────────────
     def _do_reset(self):
-        if not messagebox.askyesno("Reset", "Reset all channels and disconnect?", parent=self): return
+        if not messagebox.askyesno("Reset",
+                                   "Reset all channels and disconnect?",
+                                   parent=self):
+            return
         self._shutdown_link()
 
     def _shutdown_link(self):
@@ -374,13 +518,16 @@ class ECUSupplyController(tk.Tk):
             try:
                 self.esp32.send("*RST")
                 time.sleep(0.05)
-            except Exception: pass
+            except Exception:
+                pass
         self.esp32.disconnect()
+
         self.initialized = False
         self.ch_states = [[False] * len(MODES) for _ in range(self.NUM_CHANNELS)]
 
         for ch in range(self.NUM_CHANNELS):
-            for m_idx in range(len(MODES)): self._apply_ch_mode_ui(ch, m_idx, False)
+            for m_idx in range(len(MODES)):
+                self._apply_ch_mode_ui(ch, m_idx, False)
             self._update_ch_led(ch)
             self._set_toggle(self.ch_master_btns[ch], False)
         for m_idx in range(len(MODES)):
@@ -389,11 +536,14 @@ class ECUSupplyController(tk.Tk):
 
         self._reset_readings()
         self.init_led.set(on=False)
-        self.init_btn.configure(state="normal", text="⚡  INIT", fg=ACCENT_BLUE, highlightbackground=ACCENT_BLUE)
+        self.init_btn.configure(state="normal", text="⚡  INIT",
+                                fg=ACCENT_BLUE, highlightbackground=ACCENT_BLUE)
         self._set_conn_state(self.ST_DISCONNECTED)
 
+    # ── Channel / mode toggles ────────────────────────────────────────────────
     def _ch_master_toggle(self, ch):
-        if not self._guard(): return
+        if not self._guard():
+            return
         new_state = not all(self.ch_states[ch])
         for m_idx in range(len(MODES)):
             self.ch_states[ch][m_idx] = new_state
@@ -404,7 +554,8 @@ class ECUSupplyController(tk.Tk):
         self._update_status_bar()
 
     def _ch_mode_toggle(self, ch, m_idx):
-        if not self._guard(): return
+        if not self._guard():
+            return
         new_state = not self.ch_states[ch][m_idx]
         self.ch_states[ch][m_idx] = new_state
         self._apply_ch_mode_ui(ch, m_idx, new_state)
@@ -417,13 +568,100 @@ class ECUSupplyController(tk.Tk):
         _, m_color = MODES[m_idx]
         self.mode_leds[ch][m_idx].set(m_color if on else None, on=on)
         self._set_toggle(self.mode_toggle_btns[ch][m_idx], on)
-        if ch == 0 and m_idx == 0 and on: self.esp32.send("BAT1 on")
-        if ch == 0 and m_idx == 0 and not on: self.esp32.send("BAT1 off")
-        if ch == 0 and m_idx == 1 and on: self.esp32.send("ACC1 on")
-        if ch == 0 and m_idx == 1 and not on: self.esp32.send("ACC1 off")
-        if ch == 0 and m_idx == 2 and on: self.esp32.send("IGN1 on")
-        if ch == 0 and m_idx == 2 and not on: self.esp32.send("IGN1 off")
-        if ch == 1 and m_idx == 0 and not on: self.esp32.send("IGN1 off")
+
+
+        if ch == 0 and m_idx == 0 and on:   #Battery Channel 1
+            print("CH1 BATTERY is ON")
+            self.esp32.send("ECU1_BAT on")
+
+        if ch == 0 and m_idx == 0 and not on:
+            print("CH1 BATTERY is OFF")
+            self.esp32.send("ECU1_BAT off")
+               #Battery Channel 1
+        
+        if ch == 0 and m_idx == 1 and on:   #ACC Channel 1
+            print("CH1 ACC is ON")
+            self.esp32.send("ECU1_ACC on")
+
+        if ch == 0 and m_idx == 1 and not on:   #ACC Channel 1
+            self.esp32.send("ECU1_ACC off")
+
+        if ch == 0 and m_idx == 2 and on:   #IGN Channel 1
+            print("CH1 IGN is ON")
+            self.esp32.send("ECU1_IGN on")
+        if ch == 0 and m_idx == 2 and not on:   #IGN Channel 1
+            self.esp32.send("ECU1_IGN off")
+
+        #CH02
+
+        if ch == 1 and m_idx == 0 and on:   #Battery Channel 2
+            print("CH2 BATTERY is on")
+            self.esp32.send("ECU2_BAT on")
+        if ch == 1 and m_idx == 0 and not on:   #Battery Channel 2
+            print("CH2 BATTERY is off")
+            self.esp32.send("ECU2_BAT off")
+
+
+        if ch == 1 and m_idx == 1 and on:   #ACC Channel 2
+            print("CH2 ACC is ON")
+            self.esp32.send("ECU2_ACC on")
+        if ch == 1 and m_idx == 1 and not on:   #ACC Channel 2
+            print("CH2 ACC is OFF")
+            self.esp32.send("ECU2_ACC off")
+
+        if ch == 1 and m_idx == 2 and on:   #IGN Channel 2
+            print("CH2 IGN is ON")
+            self.esp32.send("ECU2_IGN on")
+        if ch == 1 and m_idx == 2 and not on:   #IGN Channel 2
+            print("CH2 IGN is OFF")
+            self.esp32.send("ECU2_IGN off")
+        
+        #CH03
+
+        if ch == 2 and m_idx == 0 and on:   #Battery Channel 3
+            print("CH3 BATTERY is OFF")
+            self.esp32.send("ECU3_BAT on")
+        if ch == 2 and m_idx == 0 and not on:   #Battery Channel 3 
+            print("CH3 BATTERY is OFF")
+            self.esp32.send("ECU3_BAT off")
+
+        if ch == 2 and m_idx == 1 and on:   #ACC Channel 3
+            print("CH3 ACC is ON")
+            self.esp32.send("ECU3_ACC on")
+        if ch == 2 and m_idx == 1 and not on:   #ACC Channel 3
+            print("CH3 ACC is OFF")
+            self.esp32.send("ECU3_ACC off")
+        
+        if ch == 2 and m_idx == 2 and on:   #IGN Channel 3
+            print("CH3 IGN is ON")
+            self.esp32.send("ECU3_IGN on")
+        if ch == 2 and m_idx == 2 and not on:   #IGN Channel 3
+            print("CH3 IGN is OFF")
+            self.esp32.send("ECU3_IGN off")
+
+
+        #CH04
+
+        if ch == 3 and m_idx == 0 and on:   #Battery Channel 4
+            print("CH4 BATTERY is ON")
+            self.esp32.send("ECU4_BAT on")
+        if ch == 3 and m_idx == 0 and not on:   #Battery Channel 4
+            print("CH4 BATTERY is OFF")
+            self.esp32.send("ECU4_BAT off")
+        
+        if ch == 3 and m_idx == 1 and on:   #ACC Channel 4
+            print("CH4 ACC is ON")
+            self.esp32.send("ECU4_ACC on")
+        if ch == 3 and m_idx == 1 and not on:   #ACC Channel 4
+            print("CH4 ACC is OFF")
+            self.esp32.send("ECU4_ACC off")
+        
+        if ch == 3 and m_idx == 2 and on:   #IGN Channel 4
+            print("CH4 IGN is ON")
+            self.esp32.send("ECU4_IGN on")
+        if ch == 3 and m_idx == 2 and not on:   #IGN Channel 4
+            print("CH4 IGN is OFF")
+            self.esp32.send("ECU4_IGN off")
 
     def _update_ch_led(self, ch):
         ch_colors = [ACCENT_BLUE, ACCENT_CYAN, GREEN, ORANGE]
@@ -438,8 +676,10 @@ class ECUSupplyController(tk.Tk):
         self.all_mode_leds[m_idx].set(color, on=any_on)
 
     def _all_mode_toggle(self, m_idx):
-        if not self._guard(): return
-        new_state = not all(self.ch_states[ch][m_idx] for ch in range(self.NUM_CHANNELS))
+        if not self._guard():
+            return
+        new_state = not all(self.ch_states[ch][m_idx]
+                            for ch in range(self.NUM_CHANNELS))
         for ch in range(self.NUM_CHANNELS):
             self.ch_states[ch][m_idx] = new_state
             self._apply_ch_mode_ui(ch, m_idx, new_state)
@@ -449,7 +689,8 @@ class ECUSupplyController(tk.Tk):
         self._update_status_bar()
 
     def _all_on(self):
-        if not self._guard(): return
+        if not self._guard():
+            return
         for ch in range(self.NUM_CHANNELS):
             for m_idx in range(len(MODES)):
                 self.ch_states[ch][m_idx] = True
@@ -462,7 +703,8 @@ class ECUSupplyController(tk.Tk):
         self._update_status_bar()
 
     def _all_off(self):
-        if not self._guard(): return
+        if not self._guard():
+            return
         for ch in range(self.NUM_CHANNELS):
             for m_idx in range(len(MODES)):
                 self.ch_states[ch][m_idx] = False
@@ -474,9 +716,15 @@ class ECUSupplyController(tk.Tk):
             self._set_toggle(self.all_toggle_btns[m_idx], False)
         self._update_status_bar()
 
+
+    # ── Status bar ────────────────────────────────────────────────────────────
     def _update_status_bar(self):
-        total, active = self.NUM_CHANNELS * len(MODES), sum(self.ch_states[ch][m] for ch in range(self.NUM_CHANNELS) for m in range(len(MODES)))
+        total  = self.NUM_CHANNELS * len(MODES)
+        active = sum(self.ch_states[ch][m]
+                     for ch in range(self.NUM_CHANNELS)
+                     for m in range(len(MODES)))
         self.active_ch_var.set(f"{active} / {total}")
+
         if not self.initialized and self.conn_state != self.ST_CONNECTED:
             self.status_var.set("NOT INITIALIZED")
             self.status_lbl.configure(fg=RED)
@@ -498,15 +746,20 @@ class ECUSupplyController(tk.Tk):
             self.status_lbl.configure(fg=RED)
             self.status_led.set(RED, on=True)
 
-    def _start_worker(self): threading.Thread(target=self._worker_loop, daemon=True).start()
+    # ── Background worker ─────────────────────────────────────────────────────
+    def _start_worker(self):
+        t = threading.Thread(target=self._worker_loop, daemon=True)
+        t.start()
 
     def _worker_loop(self):
         misses = 0
         while not self._worker_stop.is_set():
             state = self.conn_state
+
             if state == self.ST_DISCONNECTED:
                 time.sleep(0.2)
                 continue
+
             if state == self.ST_CONNECTING:
                 if self.esp32.connect():
                     misses = 0
@@ -517,7 +770,8 @@ class ECUSupplyController(tk.Tk):
                         self.after(0, lambda: self._set_conn_state(self.ST_DISCONNECTED))
                         continue
                     for _ in range(int(self.RECONNECT_DELAY * 10)):
-                        if self._worker_stop.is_set(): return
+                        if self._worker_stop.is_set():
+                            return
                         time.sleep(0.1)
                 continue
 
@@ -525,28 +779,33 @@ class ECUSupplyController(tk.Tk):
                 if not self.esp32.is_open:
                     self.after(0, self._on_link_lost)
                     continue
+
                 result = self.esp32.ping()
-                if result == "init": misses = 0
-                elif result == "noinit":
-                    misses = 0
-                    if self.initialized:
-                        self.after(0, self._on_link_lost)
-                        continue
-                elif result == "boot":
-                    misses = 0
-                    if self.initialized:
-                        self.after(0, self._on_link_lost)
-                        continue
-                else:
+
+                if result is None:
+                    # No reply at all -> count a miss. Only a run of misses
+                    # (e.g. the cable was pulled) drops the link.
                     misses += 1
                     if misses >= self.MISS_THRESHOLD:
                         misses = 0
                         self.esp32.disconnect()
                         self.after(0, self._on_link_lost)
                         continue
+                else:
+                    # Any reply ('init' / 'noinit' / 'boot') means the link is
+                    # alive, so connectivity is fine.
+                    misses = 0
+                    # If we believe we're initialized but the ESP32 says it is
+                    # not, it rebooted. Ignore this for a short grace period
+                    # after INIT, so a ping that was already in flight when the
+                    # user pressed INIT can't be mistaken for a reboot.
+                    if (self.initialized and result != "init"
+                            and (time.time() - self._init_time) > 2.5):
+                        self.after(0, self._on_device_reboot)
 
                 for _ in range(int(self.PING_INTERVAL * 10)):
-                    if self._worker_stop.is_set(): return
+                    if self._worker_stop.is_set():
+                        return
                     time.sleep(0.1)
                 continue
 
@@ -561,7 +820,8 @@ class ECUSupplyController(tk.Tk):
                 else:
                     self.esp32.disconnect()
                     for _ in range(int(self.RECONNECT_DELAY * 10)):
-                        if self._worker_stop.is_set(): return
+                        if self._worker_stop.is_set():
+                            return
                         time.sleep(0.1)
                 continue
 
@@ -572,12 +832,28 @@ class ECUSupplyController(tk.Tk):
         self._reset_readings()
         self._set_conn_state(self.ST_RECONNECTING)
 
+    def _on_device_reboot(self):
+        """The ESP32 restarted but the serial link is still healthy.
+
+        We do NOT reconnect (re-opening the port would reset the ESP32 again
+        and create a loop). We just drop our cached 'initialized' state and
+        clear the graphs, so the user simply presses INIT again.
+        """
+        if not self.initialized:
+            return
+        self.initialized = False
+        self.init_led.set(on=False)
+        self.init_btn.configure(fg=ACCENT_BLUE, highlightbackground=ACCENT_BLUE)
+        self._reset_readings()
+        self._update_status_bar()
+
+    # ── Shutdown ──────────────────────────────────────────────────────────────
     def destroy(self):
         self._worker_stop.set()
-        try: self.esp32.disconnect()
-        except Exception: pass
-        try: self.can_monitor.destroy() # Cerramos el CAN
-        except Exception: pass
+        try:
+            self.esp32.disconnect()
+        except Exception:
+            pass
         super().destroy()
 
 if __name__ == "__main__":

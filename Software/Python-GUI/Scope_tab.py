@@ -21,6 +21,12 @@ FONT_SMALL = ("Courier New", 9)
 NUM_CH   = 4
 BUF_SIZE = 200   
 
+# Fixed Y-axis ranges (min, max) so each trace sits at a stable, meaningful
+# height instead of auto-scaling to its own noise. Adjust to taste.
+V_RANGE = (0.0, 16.0)    # volts  (12 V automotive rails fit comfortably)
+A_RANGE = (0.0, 1.0)     # amps   (INA226 set for ~0.8 A max)
+P_RANGE = (0.0, 16.0)    # watts
+
 class ScopeTab(tk.Frame):
     def __init__(self, parent, **kw):
         # Evita el error de 'multiple values for keyword argument bg'
@@ -110,20 +116,8 @@ class ScopeTab(tk.Frame):
         self._live_lbl.pack(side="right", padx=4)
         self._blink_live()
 
-        # ── SOLUCIÓN: Empacar la leyenda al fondo (side="bottom") ──
-        leg = tk.Frame(self, bg=PANEL, padx=0, pady=4)
-        leg.pack(side="bottom", fill="x")
-
-        self._legend_item(leg, "#00aaff", "voltage (V)  —— solid")
-        self._legend_item(leg, "#00e5cc", "current (A)  - - dashed")
-        self._legend_item(leg, PWR_COLOR,  "power (W)  ···· dotted")
-
-        tk.Label(leg, text=f"BUFFER  {BUF_SIZE} pts",
-                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="right")
-
-        # ── Las gráficas ahora toman el espacio restante (side="top") ──
         grid = tk.Frame(self, bg=PANEL)
-        grid.pack(side="top", fill="both", expand=True, pady=(0, 6))
+        grid.pack(fill="both", expand=True, pady=(0, 6))
 
         self._canvases = []
         self._lbl_v    = []
@@ -158,6 +152,16 @@ class ScopeTab(tk.Frame):
             cv = tk.Canvas(card, bg=CARD, highlightthickness=0, height=110)
             cv.pack(fill="both", expand=True, padx=2, pady=(0, 4))
             self._canvases.append(cv)
+
+        leg = tk.Frame(self, bg=PANEL, padx=0, pady=4)
+        leg.pack(fill="x")
+
+        self._legend_item(leg, "#00aaff", "voltage (V)  —— solid")
+        self._legend_item(leg, "#00e5cc", "current (A)  - - dashed")
+        self._legend_item(leg, PWR_COLOR,  "power (W)  ···· dotted")
+
+        tk.Label(leg, text=f"BUFFER  {BUF_SIZE} pts",
+                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="right")
 
     def _stat_label(self, parent, unit, color):
         tk.Label(parent, text=unit, font=FONT_LABEL,
@@ -257,29 +261,33 @@ class ScopeTab(tk.Frame):
 
         if self._show_v:
             self._draw_signal(cv, list(self.volt_buf[ch]),
-                              CH_COLORS[ch], W, H, style="solid")
+                              CH_COLORS[ch], W, H, V_RANGE, style="solid")
         if self._show_a:
             self._draw_signal(cv, list(self.amp_buf[ch]),
-                              "#00e5cc", W, H, style="dashed")
+                              "#00e5cc", W, H, A_RANGE, style="dashed")
         if self._show_p:
             self._draw_signal(cv, list(self.pwr_buf[ch]),
-                              PWR_COLOR, W, H, style="dotted")
+                              PWR_COLOR, W, H, P_RANGE, style="dotted")
 
-    def _draw_signal(self, cv, data, color, W, H, style="solid"):
+    def _draw_signal(self, cv, data, color, W, H, vrange, style="solid"):
         if len(data) < 2:
             return
 
-        lo   = min(data)
-        hi   = max(data)
-        span = hi - lo or 0.01
+        lo, hi = vrange                 # fixed range for this quantity
+        span = (hi - lo) or 0.01
         pad  = H * 0.10
         eff  = H - 2 * pad
         n    = len(data)
 
         pts = []
         for i, v in enumerate(data):
+            frac = (v - lo) / span
+            if frac < 0.0:              # clamp out-of-range samples to the edges
+                frac = 0.0
+            elif frac > 1.0:
+                frac = 1.0
             pts.append(int(i / (n - 1) * W))
-            pts.append(int(pad + eff * (1.0 - (v - lo) / span)))
+            pts.append(int(pad + eff * (1.0 - frac)))
 
         if style == "solid":
             cv.create_line(*pts, fill=color, width=2, smooth=True)
