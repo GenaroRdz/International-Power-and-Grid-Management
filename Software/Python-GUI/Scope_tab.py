@@ -110,8 +110,20 @@ class ScopeTab(tk.Frame):
         self._live_lbl.pack(side="right", padx=4)
         self._blink_live()
 
+        # ── SOLUCIÓN: Empacar la leyenda al fondo (side="bottom") ──
+        leg = tk.Frame(self, bg=PANEL, padx=0, pady=4)
+        leg.pack(side="bottom", fill="x")
+
+        self._legend_item(leg, "#00aaff", "voltage (V)  —— solid")
+        self._legend_item(leg, "#00e5cc", "current (A)  - - dashed")
+        self._legend_item(leg, PWR_COLOR,  "power (W)  ···· dotted")
+
+        tk.Label(leg, text=f"BUFFER  {BUF_SIZE} pts",
+                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="right")
+
+        # ── Las gráficas ahora toman el espacio restante (side="top") ──
         grid = tk.Frame(self, bg=PANEL)
-        grid.pack(fill="both", expand=True, pady=(0, 6))
+        grid.pack(side="top", fill="both", expand=True, pady=(0, 6))
 
         self._canvases = []
         self._lbl_v    = []
@@ -146,16 +158,6 @@ class ScopeTab(tk.Frame):
             cv = tk.Canvas(card, bg=CARD, highlightthickness=0, height=110)
             cv.pack(fill="both", expand=True, padx=2, pady=(0, 4))
             self._canvases.append(cv)
-
-        leg = tk.Frame(self, bg=PANEL, padx=0, pady=4)
-        leg.pack(fill="x")
-
-        self._legend_item(leg, "#00aaff", "voltage (V)  —— solid")
-        self._legend_item(leg, "#00e5cc", "current (A)  - - dashed")
-        self._legend_item(leg, PWR_COLOR,  "power (W)  ···· dotted")
-
-        tk.Label(leg, text=f"BUFFER  {BUF_SIZE} pts",
-                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="right")
 
     def _stat_label(self, parent, unit, color):
         tk.Label(parent, text=unit, font=FONT_LABEL,
