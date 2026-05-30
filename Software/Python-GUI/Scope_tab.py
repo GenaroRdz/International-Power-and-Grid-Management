@@ -68,7 +68,7 @@ class ScopeTab(tk.Frame):
     def set_connected(self, connected: bool):
         self._connected = connected
         if not self._paused:
-            color = "#00e676" if connected else "#ff8c00"
+            color = "#00e676" if connected else "#ff1744"
             text  = "● STREAMING" if connected else "● OFFLINE"
             self._live_lbl.configure(text=text, fg=color)
 
