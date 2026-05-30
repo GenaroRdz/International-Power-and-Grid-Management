@@ -112,7 +112,7 @@ class ScopeTab(tk.Frame):
         tk.Frame(bar, bg=PANEL).pack(side="left", expand=True)
 
         self._live_lbl = tk.Label(bar, text="● OFFLINE",
-                                  font=FONT_LABEL, fg="#ff8c00", bg=PANEL)
+                                  font=FONT_LABEL, fg="#ff1744", bg=PANEL)
         self._live_lbl.pack(side="right", padx=4)
         self._blink_live()
 
