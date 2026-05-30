@@ -3,7 +3,7 @@ from tkinter import messagebox
 import threading
 import time
 import queue
-from New_device_connection_2 import ESP32Connection
+from New_device_connection_3 import ESP32Connection
 from Scope_tab import ScopeTab
 
 # ── Colours ───────────────────────────────────────────────────────────────────
@@ -825,25 +825,47 @@ class ECUSupplyController(tk.Tk):
                         time.sleep(0.1)
                 continue
 
+    def _reset_channel_ui(self):
+        """Set every channel/mode back to OFF in the UI only (no commands sent).
+
+        Used when the ESP32 reset on its own: it already cleared its outputs, so
+        we just resync the buttons/LEDs. We must NOT send OFF commands to a board
+        that is mid-reboot / not initialized.
+        """
+        self.ch_states = [[False] * len(MODES) for _ in range(self.NUM_CHANNELS)]
+        for ch in range(self.NUM_CHANNELS):
+            for m_idx in range(len(MODES)):
+                self.mode_leds[ch][m_idx].set(None, on=False)
+                self._set_toggle(self.mode_toggle_btns[ch][m_idx], False)
+            self._update_ch_led(ch)
+            self._set_toggle(self.ch_master_btns[ch], False)
+        for m_idx in range(len(MODES)):
+            self._update_all_led(m_idx)
+            self._set_toggle(self.all_toggle_btns[m_idx], False)
+
     def _on_link_lost(self):
         self.initialized = False
         self.init_led.set(on=False)
         self.init_btn.configure(fg=ACCENT_BLUE, highlightbackground=ACCENT_BLUE)
+        self._reset_channel_ui()
         self._reset_readings()
         self._set_conn_state(self.ST_RECONNECTING)
 
     def _on_device_reboot(self):
-        """The ESP32 restarted but the serial link is still healthy.
+        """The ESP32 restarted (reported 'noinit'/'BOOT') but the serial link is
+        still healthy.
 
-        We do NOT reconnect (re-opening the port would reset the ESP32 again
-        and create a loop). We just drop our cached 'initialized' state and
-        clear the graphs, so the user simply presses INIT again.
+        The board cleared its outputs and lost its initialized state, so we
+        mirror that in the GUI: drop 'initialized', switch every channel back to
+        OFF, and clear the graphs. We do NOT reconnect (re-opening the port would
+        reset the board again and loop). The user just presses INIT to resume.
         """
         if not self.initialized:
             return
         self.initialized = False
         self.init_led.set(on=False)
         self.init_btn.configure(fg=ACCENT_BLUE, highlightbackground=ACCENT_BLUE)
+        self._reset_channel_ui()
         self._reset_readings()
         self._update_status_bar()
 
