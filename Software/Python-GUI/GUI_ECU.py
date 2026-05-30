@@ -3,7 +3,7 @@ from tkinter import messagebox
 import threading
 import time
 import queue
-from New_device_connection_3 import ESP32Connection
+from New_device_connection_2 import ESP32Connection
 from Scope_tab import ScopeTab
 
 # ── Colours ───────────────────────────────────────────────────────────────────
