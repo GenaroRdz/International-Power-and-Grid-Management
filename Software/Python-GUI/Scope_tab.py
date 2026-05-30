@@ -10,7 +10,7 @@ GRID_C   = "#1e2530"
 TEXT_SEC = "#7a8899"
 TEXT_DIM = "#3d4a5a"
 
-CH_COLORS = ["#00aaff", "#00e5cc", "#00e676", "#ff8c00"]
+CH_COLORS = ["#00aaff", "#00e5cc", "#00e676", "#ffd600"]
 PWR_COLOR = "#B565FC"   
 
 FONT_LABEL = ("Courier New", 8,  "bold")
@@ -23,9 +23,9 @@ BUF_SIZE = 200
 
 # Fixed Y-axis ranges (min, max) so each trace sits at a stable, meaningful
 # height instead of auto-scaling to its own noise. Adjust to taste.
-V_RANGE = (0.0, 16.0)    # volts  (12 V automotive rails fit comfortably)
-A_RANGE = (0.0, 1.0)     # amps   (INA226 set for ~0.8 A max)
-P_RANGE = (0.0, 16.0)    # watts
+V_RANGE = (0.0, 13.0)    # volts  (12 V automotive rails fit comfortably)
+A_RANGE = (0.0, 0.5)     # amps   (INA226 set for ~0.8 A max)
+P_RANGE = (0.0, 6.0)    # watts
 
 class ScopeTab(tk.Frame):
     def __init__(self, parent, **kw):
@@ -68,7 +68,7 @@ class ScopeTab(tk.Frame):
     def set_connected(self, connected: bool):
         self._connected = connected
         if not self._paused:
-            color = "#00e676" if connected else "#ff1744"
+            color = "#00e676" if connected else "#ff8c00"
             text  = "● STREAMING" if connected else "● OFFLINE"
             self._live_lbl.configure(text=text, fg=color)
 
@@ -98,7 +98,7 @@ class ScopeTab(tk.Frame):
         self._btn_v.pack(side="left", padx=3)
 
         self._btn_a = self._pill(bar, "CURRENT", self._toggle_a,
-                                 active=True, color="#00e5cc")
+                                 active=True, color="#ff8c00")
         self._btn_a.pack(side="left", padx=3)
 
         self._btn_p = self._pill(bar, "POWER", self._toggle_p,
@@ -112,7 +112,7 @@ class ScopeTab(tk.Frame):
         tk.Frame(bar, bg=PANEL).pack(side="left", expand=True)
 
         self._live_lbl = tk.Label(bar, text="● OFFLINE",
-                                  font=FONT_LABEL, fg="#ff1744", bg=PANEL)
+                                  font=FONT_LABEL, fg="#ff8c00", bg=PANEL)
         self._live_lbl.pack(side="right", padx=4)
         self._blink_live()
 
@@ -142,7 +142,7 @@ class ScopeTab(tk.Frame):
             rf.pack(side="right")
 
             lv = self._stat_label(rf, "V", "#00aaff")
-            la = self._stat_label(rf, "A", "#00e5cc")
+            la = self._stat_label(rf, "A", "#ff8c00")
             lp = self._stat_label(rf, "W", PWR_COLOR)
 
             self._lbl_v.append(lv)
@@ -156,9 +156,9 @@ class ScopeTab(tk.Frame):
         leg = tk.Frame(self, bg=PANEL, padx=0, pady=4)
         leg.pack(fill="x")
 
-        self._legend_item(leg, "#00aaff", "voltage (V)  —— solid")
-        self._legend_item(leg, "#00e5cc", "current (A)  - - dashed")
-        self._legend_item(leg, PWR_COLOR,  "power (W)  ···· dotted")
+        self._legend_item(leg, "#00aaff", "voltage (V) ")
+        self._legend_item(leg, "#ff8c00", "current (A)  ")
+        self._legend_item(leg, PWR_COLOR,  "power (W)  ")
 
         tk.Label(leg, text=f"BUFFER  {BUF_SIZE} pts",
                  font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="right")
@@ -264,10 +264,10 @@ class ScopeTab(tk.Frame):
                               CH_COLORS[ch], W, H, V_RANGE, style="solid")
         if self._show_a:
             self._draw_signal(cv, list(self.amp_buf[ch]),
-                              "#00e5cc", W, H, A_RANGE, style="dashed")
+                              "#ff8c00", W, H, A_RANGE, style="solid")
         if self._show_p:
             self._draw_signal(cv, list(self.pwr_buf[ch]),
-                              PWR_COLOR, W, H, P_RANGE, style="dotted")
+                              PWR_COLOR, W, H, P_RANGE, style="solid")
 
     def _draw_signal(self, cv, data, color, W, H, vrange, style="solid"):
         if len(data) < 2:

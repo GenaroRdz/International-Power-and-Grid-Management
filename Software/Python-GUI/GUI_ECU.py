@@ -28,9 +28,9 @@ FONT_BTN    = ("Courier New", 8, "bold")
 FONT_MODE   = ("Courier New", 8, "bold")
 
 MODES = [
-    ("BATTERY", ACCENT_BLUE),
-    ("ACC",     ACCENT_CYAN),
-    ("IGN",     LILA),
+    ("BATTERY", GREEN),
+    ("ACC",     ACCENT_BLUE),
+    ("IGN",     YELLOW),
 ]
 
 # ── LED widget ────────────────────────────────────────────────────────────────
