@@ -1,9 +1,9 @@
-from machine import Pin
+from machine import Pin, SPI
+from mcp2515 import MCP2515
 import setup
-import time
 import INA226
 
-# Initialize output pins using GPIO numbers defined in setup
+# ── Outputs ───────────────────────────────────────────────────────────────────
 OUTPUTS = {
     "ECU1_BAT": Pin(setup.ECU1_BAT, Pin.OUT),
     "ECU1_ACC": Pin(setup.ECU1_ACC, Pin.OUT),
@@ -20,84 +20,116 @@ OUTPUTS = {
 }
 
 initialized = False
+streaming = False   # True while the INA226 readings are being streamed out
+
+# ── Command handlers ──────────────────────────────────────────────────────────
+
+def handle_ping(cmd):
+    global initialized
+    if cmd == "ping":
+        if initialized:
+            print("pong_init")
+        else:
+            print("pong_noinit")
+
 
 def commands(cmd):
-    global initialized
+    global initialized, streaming
     cmd = cmd.strip().upper()
-
     if not cmd:
+        return
+
+    if cmd == "PING":      # already answered by handle_ping(); don't echo an error
         return
 
     if cmd == "A":
         print(initialized)
-
     elif cmd == "*INIT":
         initialized = True
+        INA226.init_INAs()      # set up the four sensors once
         print("Initialized")
-
     elif cmd == "*RST":
         reset()
-
     elif cmd == "*IDN?":
         print(f"{setup.FABRICANTE},{setup.MODELO},{setup.SERIAL},{setup.VERSION}")
 
-    elif cmd == "ON ALL":
+
+    # ── INA226 commands ─────────────────────────────────────────────────────────
+    elif cmd == "INA_START":
         if not initialized:
             print("ERROR: System not initialized, send *INIT first")
             return
-        for pin in OUTPUTS.values():
-            pin.on()
-        print("All outputs ON")
+        streaming = True
+        print("INA streaming ON")
 
-    elif cmd == "OFF ALL":
+    elif cmd == "INA_STOP":
+        streaming = False
+        print("INA streaming OFF")
+
+    elif cmd == "INA?":          # single reading on demand (no streaming needed)
         if not initialized:
             print("ERROR: System not initialized, send *INIT first")
             return
-        for pin in OUTPUTS.values():
-            pin.off()
-        print("All outputs OFF")
+        print(INA226.read_all_INAs_str())
 
-    elif cmd.startswith("READ INA"):
-            parts = cmd.split()
-            if len(parts) == 3:
-                # READ INA 0x40
-                try:
-                    addr = int(parts[2], 16)
-                except ValueError:
-                    print("ERROR: Invalid address format, use hex e.g. READ INA 0x40")
-                    return
-            else:
-                # READ INA  ← usa dirección por defecto 0x40
-                addr = 0x40
 
-            import sys
-            import select
-            print("Continuous read started. Send 'Q' to stop.")
-            while True:
-                print(INA226.lectura_INA(addr))
-                # Esperar 500 ms pero revisando stdin cada 50 ms
-                for _ in range(10):
-                    time.sleep_ms(50)
-                    if select.select([sys.stdin], [], [], 0)[0]:
-                        stop_cmd = sys.stdin.readline().strip().upper()
-                        if stop_cmd == "Q":
-                            print("Continuous read stopped.")
-                            return
-    else:
+
+    # ── CAN commands ──────────────────────────────────────────────────────────
+    elif cmd == "CAN_READ":
+        if not initialized:
+            print("ERROR: System not initialized, send *INIT first")
+            return
+        can_read()
+
+    elif cmd.startswith("CAN_SEND"):
+        if not initialized:
+            print("ERROR: System not initialized, send *INIT first")
+            return
         parts = cmd.split()
-        if len(parts) == 2 and parts[0] in OUTPUTS and parts[1] in ("ON", "OFF"):
+        can_send(parts[1:])   # everything after "CAN_SEND"
+
+    elif cmd == "CAN_STATUS":
+        if not initialized:
+            print("ERROR: System not initialized, send *INIT first")
+            return
+        can_status()
+
+
+
+    # ── Output control ────────────────────────────────────────────────────────
+    else:
+        if cmd == "ON ALL":
             if not initialized:
                 print("ERROR: System not initialized, send *INIT first")
                 return
-            if parts[1] == "ON":
-                OUTPUTS[parts[0]].on()
-            else:
-                OUTPUTS[parts[0]].off()
+            for pin in OUTPUTS.values():
+                pin.on()
+        elif cmd == "OFF ALL":
+            if not initialized:
+                print("ERROR: System not initialized, send *INIT first")
+                return
+            for pin in OUTPUTS.values():
+                pin.off()
         else:
-            print(f"ERROR: Unknown command: {cmd}")
+            parts = cmd.split()
+            if len(parts) == 2 and parts[1] in ("ON", "OFF"):
+                name = parts[0]
+                if name not in OUTPUTS:
+                    print(f"ERROR: Output {name} not available "
+                          f"(valid: BAT1-4, ACC1-4, IGN1-4)")
+                    return
+                if not initialized:
+                    print("ERROR: System not initialized, send *INIT first")
+                    return
+                OUTPUTS[name].on() if parts[1] == "ON" else OUTPUTS[name].off()
+            else:
+                print(f"ERROR: Unknown command: {cmd}")
+
+
 
 def reset():
-    global initialized
+    global initialized, streaming
     initialized = False
+    streaming = False
     for pin in OUTPUTS.values():
         pin.off()
