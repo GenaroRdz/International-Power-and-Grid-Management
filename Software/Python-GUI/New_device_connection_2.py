@@ -5,22 +5,8 @@ import time
 
 
 class ESP32Connection:
-    """Owns the serial link to the ESP32.
 
-    Key idea: a SINGLE background reader thread is the only thing that reads
-    the port. It reads every line and routes it:
-        'pong...'  -> records init / noinit status  (used by ping())
-        'BOOT'     -> records that the ESP32 rebooted (used by ping())
-        'INA,...'  -> forwarded to the on_data callback (the sensor stream)
-        anything else -> forwarded to on_data too
-
-    Because nothing else reads the port, pings, outgoing commands and the INA
-    stream never fight over the same bytes. That contention was what made the
-    old ping() (which did reset_input_buffer + readline itself) miss pongs and
-    cause the connect/disconnect flapping.
-    """
-
-    def __init__(self, port='COM7', baudrate=115200):
+    def __init__(self, port='COM5', baudrate=115200):
         self.port = port
         self.baudrate = baudrate
         self.ser = None
@@ -41,6 +27,10 @@ class ESP32Connection:
 
     # ── Connect / disconnect ──────────────────────────────────────────────────
     def connect(self):
+        # Stop any previous reader BEFORE touching the port. Closing a port while
+        # the reader is mid-read crashes on Windows, so the reader must be gone
+        # first. (This is the main cause of the reconnect/disconnect loop.)
+        self._stop_reader()
         with self.lock:
             # Close anything already open first, so a leaked handle can't block
             # the re-open (a common cause of reconnect failures on Windows).
@@ -96,8 +86,11 @@ class ESP32Connection:
                 break
             try:
                 raw = ser.readline()              # blocks up to timeout (1 s)
-            except (serial.SerialException, OSError):
-                break                             # port closed / unplugged
+            except Exception:
+                # The port was closed/unplugged mid-read. On Windows this raises
+                # TypeError (byref on a NULL handle), NOT SerialException -- so we
+                # must catch everything and just exit the reader cleanly.
+                break
             if not raw:
                 continue                          # timed out -> just loop again
             line = raw.decode(errors="ignore").strip()
