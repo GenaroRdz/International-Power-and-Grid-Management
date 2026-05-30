@@ -17,7 +17,7 @@ R_SHUNT        = 0.01
 MAX_EXPECTED_A = 0.8
 
 # The four INA226 sensors on the bus, in the order they will be reported.
-INA_ADDRS = (0x40, 0x45, 0x41, 0x44)
+INA_ADDRS = (0x44, 0x41, 0x45,0x40)
 
 class INA226:
     def __init__(self, i2c, addr=INA226_ADDR, r_shunt=R_SHUNT, i_max=MAX_EXPECTED_A):
