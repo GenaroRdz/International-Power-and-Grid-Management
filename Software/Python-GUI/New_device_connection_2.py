@@ -3,12 +3,15 @@ import serial.tools.list_ports
 import threading
 import time
 
+from settings_store import load_settings, save_settings
+
 
 class ESP32Connection:
 
-    def __init__(self, port='COM5', baudrate=115200):
-        self.port = port
-        self.baudrate = baudrate
+    def __init__(self, port=None, baudrate=None):
+        cfg = load_settings()
+        self.port = port or cfg["port"]
+        self.baudrate = baudrate or cfg["baudrate"]
         self.ser = None
         self.lock = threading.Lock()      # protects open / close / write only
 
@@ -24,6 +27,26 @@ class ESP32Connection:
 
     def list_ports(self):
         return [p.device for p in serial.tools.list_ports.comports()]
+
+    def list_ports_detailed(self):
+        """Return [(device, description), ...] for every detected serial port,
+        e.g. ('COM7', 'Silicon Labs CP210x USB to UART Bridge'). Used by the
+        config 'detector' so the user can tell which port is the ESP32."""
+        out = []
+        for p in serial.tools.list_ports.comports():
+            out.append((p.device, p.description or ""))
+        return out
+
+    def set_port(self, port, baudrate=None):
+        """Update the target port (and optionally baudrate) and persist it.
+
+        The caller must disconnect/reconnect for the change to take effect --
+        re-opening a live port mid-read crashes the reader on Windows.
+        """
+        self.port = port
+        if baudrate is not None:
+            self.baudrate = baudrate
+        save_settings({"port": self.port, "baudrate": self.baudrate})
 
     # ── Connect / disconnect ──────────────────────────────────────────────────
     def connect(self):
