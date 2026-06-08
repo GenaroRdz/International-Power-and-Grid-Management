@@ -1,3 +1,4 @@
+#test commit
 # Device identification strings for *IDN? SCPI command
 FABRICANTE = "International"
 MODELO = "ESP32"
