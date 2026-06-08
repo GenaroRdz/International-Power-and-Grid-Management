@@ -3,7 +3,7 @@ import serial.tools.list_ports
 import threading
 import time
 
-from settings_store import load_settings, save_settings
+from settings import load_settings, save_settings
 
 
 class ESP32Connection:

@@ -7,6 +7,7 @@ import serial.tools.list_ports
 from New_device_connection_2 import ESP32Connection
 from Scope_tab import ScopeTab
 from settings import load_settings, save_settings
+from CAN_Monitor_V7  import CanMonitor
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BG          = "#0d0f12"
@@ -298,17 +299,14 @@ class ECUSupplyController(tk.Tk):
 
     # ── UI ────────────────────────────────────────────────────────────────────
     def _build_ui(self):
-        # Status bar pinned to the bottom of the WINDOW (always visible).
+        # Status bar pinned to the bottom of the WINDOW
         self._build_status_bar(self)
 
-        # Everything else lives in a vertically scrollable area, so on small
-        # screens nothing is ever clipped -- the user can scroll to it.
         container = tk.Frame(self, bg=BG)
         container.pack(side="top", fill="both", expand=True)
 
         canvas = tk.Canvas(container, bg=BG, highlightthickness=0)
-        vscroll = tk.Scrollbar(container, orient="vertical",
-                               command=canvas.yview)
+        vscroll = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vscroll.set)
         vscroll.pack(side="right", fill="y")
         canvas.pack(side="left", fill="both", expand=True)
@@ -321,10 +319,10 @@ class ECUSupplyController(tk.Tk):
         outer.bind("<Configure>", _on_inner_config)
 
         def _on_canvas_config(e):
-            canvas.itemconfig(win_id, width=e.width)   # match inner to canvas
+            canvas.itemconfig(win_id, width=e.width)
         canvas.bind("<Configure>", _on_canvas_config)
 
-        # Mouse wheel scrolling (Windows/Mac use <MouseWheel>, Linux Buttons 4/5)
+        # Mouse wheel scrolling
         def _wheel(e):
             delta = -1 if (getattr(e, "num", None) == 5 or e.delta < 0) else 1
             canvas.yview_scroll(-delta, "units")
@@ -335,24 +333,68 @@ class ECUSupplyController(tk.Tk):
 
         self._build_title(outer)
 
-        main = tk.Frame(outer, bg=PANEL, bd=0,
+        # ── TAB SYSTEM BAR ────────────────────────────────────────────────────
+        tab_bar = tk.Frame(outer, bg=BG)
+        tab_bar.pack(fill="x", pady=(0, self._s(10)))
+
+        self.tab_btn_ecu = tk.Button(tab_bar, text="⬡ ECU CONTROL", font=FONT_CH,
+                                     fg=BG, bg=ACCENT_BLUE, relief="flat", bd=0,
+                                     activebackground=ACCENT_CYAN, cursor="hand2",
+                                     command=lambda: self._switch_tab("ECU"), 
+                                     padx=15, pady=5)
+        self.tab_btn_ecu.pack(side="left", padx=(0, 5))
+
+        self.tab_btn_can = tk.Button(tab_bar, text="⬡ CAN MONITOR", font=FONT_CH,
+                                     fg=TEXT_SEC, bg=CARD, relief="flat", bd=0,
+                                     activebackground=BORDER, cursor="hand2",
+                                     command=lambda: self._switch_tab("CAN"), 
+                                     padx=15, pady=5)
+        self.tab_btn_can.pack(side="left")
+
+        # ── TAB CONTAINERS ────────────────────────────────────────────────────
+        self.frame_ecu = tk.Frame(outer, bg=BG)
+        self.frame_ecu.pack(fill="both", expand=True)
+
+        self.frame_can = tk.Frame(outer, bg=BG)
+        # We don't pack frame_can yet; it starts hidden
+
+        # --- ECU CONTROL TAB CONTENT ---
+        main = tk.Frame(self.frame_ecu, bg=PANEL, bd=0,
                         highlightbackground=BORDER, highlightthickness=1)
         main.pack(fill="both", expand=True, pady=(0, self._s(12)))
 
         pad = dict(padx=self._s(18), pady=self._s(14))
-
         self._build_init_row(main, pad)
         self._build_separator(main)
         self._build_channels(main, pad)
         self._build_separator(main)
 
-        # ── Osciloscopio Embebido ──
+        # Embedded Scope
         self._scope_tab = ScopeTab(main, bg=PANEL)
         self._scope_tab.pack(fill="both", expand=True,
                              padx=self._s(18), pady=self._s(10))
 
         self._build_separator(main)
         self._build_global_buttons(main, pad)
+
+        # --- CAN MONITOR TAB CONTENT ---
+        self._can_monitor = CanMonitor(self.frame_can)
+        self._can_monitor.pack(fill="both", expand=True)
+
+    def _switch_tab(self, tab):
+        """Handles switching between the ECU Control and CAN Monitor frames."""
+        if tab == "ECU":
+            self.frame_can.pack_forget()
+            self.frame_ecu.pack(fill="both", expand=True)
+            self.tab_btn_ecu.configure(bg=ACCENT_BLUE, fg=BG)
+            self.tab_btn_can.configure(bg=CARD, fg=TEXT_SEC)
+            self._canvas.yview_moveto(0) # Reset scroll position
+        else:
+            self.frame_ecu.pack_forget()
+            self.frame_can.pack(fill="both", expand=True)
+            self.tab_btn_ecu.configure(bg=CARD, fg=TEXT_SEC)
+            self.tab_btn_can.configure(bg=ACCENT_BLUE, fg=BG)
+            self._canvas.yview_moveto(0) # Reset scroll position
 
     def _build_title(self, parent):
         hdr = tk.Frame(parent, bg=BG)
