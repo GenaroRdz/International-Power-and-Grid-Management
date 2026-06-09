@@ -544,10 +544,18 @@ class ECUSupplyController(tk.Tk):
 
     # ── INA226 stream from the ESP32 ──────────────────────────────────────────
     def _on_serial_line(self, line):
-        if not line.startswith("INA,"):
+        # INA226 stream -> scope/graphs
+        if line.startswith("INA,"):
+            nums = [self._safe_float(p) for p in line.split(",")[1:]]
+            self._ina_queue.put(nums)
             return
-        nums = [self._safe_float(p) for p in line.split(",")[1:]]
-        self._ina_queue.put(nums)
+        # Every other line that isn't a pong/boot status (those are consumed by
+        # ESP32Connection before we get here) is forwarded to the CAN monitor.
+        # feed_line() is thread-safe: it only touches a queue / plain attribute,
+        # never a Tk widget, so calling it from the reader thread is fine.
+        cm = getattr(self, "_can_monitor", None)
+        if cm is not None:
+            cm.feed_line(line)
 
     def _poll_ina_queue(self):
         try:
@@ -748,6 +756,9 @@ class ECUSupplyController(tk.Tk):
         self.init_led.set(GREEN, on=True)
         self.init_btn.configure(fg=GREEN, highlightbackground=GREEN)
         self.esp32.send("INA_START")
+        # Ask the board once whether its CAN controller initialised OK, so the
+        # CAN monitor can display real bus health (reply: 'CAN_OK = True/False').
+        self.esp32.send("CAN?")
         self._update_status_bar()
 
     # ── Connect / Disconnect (user actions) ───────────────────────────────────
@@ -780,6 +791,9 @@ class ECUSupplyController(tk.Tk):
 
         self._update_status_bar()
         self._scope_tab.set_connected(self.connected)
+        cm = getattr(self, "_can_monitor", None)
+        if cm is not None:
+            cm.set_connected(self.connected)
 
     # ── Reset ─────────────────────────────────────────────────────────────────
     def _do_reset(self):
