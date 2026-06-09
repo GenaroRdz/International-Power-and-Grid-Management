@@ -80,12 +80,6 @@ ADDR = {
 NAMES      = {can_id: name for name, can_id in IDS.items()}   # CAN id -> name
 ADDR_NAMES = {addr: name for name, addr in ADDR.items()}      # addr   -> name
 
-# Sanity print at boot. Open the REPL (or watch the serial log) right after a
-# reset and you MUST see exactly:
-#   ADDR table -> {'MAIN': 0, 'ECU1': 1, 'ECU2': 2, 'ECU3': 3, 'ECU4': 4}
-# If you see anything else, this board is running a stale setup.py -- re-flash.
-print("ADDR table ->", ADDR)
-
 
 def id_of(name):       # "ECU1" -> 0x101
     return IDS[name]
