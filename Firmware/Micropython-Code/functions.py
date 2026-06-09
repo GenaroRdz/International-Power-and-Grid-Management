@@ -60,6 +60,10 @@ def can_send(target, text):
         return False
     payload = bytes([addr]) + text.encode()
     try:
+        # Self-heal: if the controller wedged (bus-off) while an ECU was
+        # unplugged, re-init it here so the very next command works again --
+        # no manual device reset needed. Costs one register read otherwise.
+        can.recover_if_bus_off()
         can.send_message(id_of(Current_Device), payload)
         _emit_can_trace("TX", id_of(Current_Device), payload, True)
         return True

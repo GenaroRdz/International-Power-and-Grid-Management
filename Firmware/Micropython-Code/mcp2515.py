@@ -50,6 +50,11 @@ MODE_LISTENONLY = 0x60
 MODE_CONFIG     = 0x80
 MODE_MASK       = 0xE0
 
+# CANCTRL extra bits
+OSM_BIT         = 0x08   # One-Shot Mode: transmit each frame exactly once
+TXREQ_BIT       = 0x08   # TXBnCTRL: transmit request / buffer busy
+EFLG_TXBO       = 0x20   # EFLG: bus-off (controller stopped transmitting)
+
 # ─── Bitrate configs [CNF1, CNF2, CNF3] for 8 MHz and 16 MHz crystals ─────────
 # Format: { speed_kbps: (CNF1, CNF2, CNF3) }
 BITRATE_CFG_8MHZ = {
@@ -77,6 +82,7 @@ class MCP2515:
         self._spi    = spi
         self._cs     = cs
         self._crystal = crystal
+        self._last_bitrate = None        # remembered so recovery can re-apply it
         self._cs.init(self._cs.OUT, value=1)
 
     # ── Low-level SPI helpers ─────────────────────────────────────────────────
@@ -151,6 +157,7 @@ class MCP2515:
         self._write_reg(CNF1, cnf1)
         self._write_reg(CNF2, cnf2)
         self._write_reg(CNF3, cnf3)
+        self._last_bitrate = kbps        # so recover_if_bus_off() can re-apply it
 
     def _set_mode(self, mode: int, timeout_ms: int = 200):
         import time
@@ -165,9 +172,24 @@ class MCP2515:
                                    f"(CANSTAT=0x{status:02X})")
             time.sleep_ms(1)
 
-    def set_normal_mode(self):
-        """Switch to Normal (operational) mode."""
+    def set_normal_mode(self, one_shot: bool = True):
+        """Switch to Normal (operational) mode.
+
+        one_shot=True turns on ONE-SHOT MODE: the controller transmits each
+        frame exactly once and does NOT auto-retry on error. This matters on a
+        small bus: by default, a frame sent to a MISSING/silent node is retried
+        forever, which (a) keeps the TX buffer busy so later sends block, and
+        (b) runs the error counter up to 'bus-off', a state where the chip stops
+        transmitting until it is re-initialised (that's the "I had to reset the
+        device" symptom). With one-shot, a frame to a missing node fails once
+        and the buffer frees instantly. Whether a command actually arrived is
+        confirmed at the application level by the ECU's reply.
+        """
         self._set_mode(MODE_NORMAL)
+        if one_shot:
+            self._bit_modify(CANCTRL, OSM_BIT, OSM_BIT)   # OSM = 1
+        else:
+            self._bit_modify(CANCTRL, OSM_BIT, 0x00)      # OSM = 0 (auto-retry)
         # Accept all messages on RXB0 and RXB1
         self._write_reg(RXB0CTRL, 0x60)
         self._write_reg(RXB1CTRL, 0x60)
@@ -184,6 +206,32 @@ class MCP2515:
         """Switch back to Configuration mode."""
         self._set_mode(MODE_CONFIG)
 
+    # ── Health / error recovery ───────────────────────────────────────────────
+
+    def error_flags(self) -> int:
+        """Return the EFLG register (error / warning state)."""
+        return self._read_reg(EFLG)
+
+    def is_bus_off(self) -> bool:
+        """True if the controller is bus-off and has stopped transmitting."""
+        return bool(self._read_reg(EFLG) & EFLG_TXBO)
+
+    def recover_if_bus_off(self) -> bool:
+        """Re-initialise the controller if it has gone bus-off.
+
+        This is what lets the bus recover after an ECU is unplugged and plugged
+        back in WITHOUT a manual reset. It is cheap to call before every send:
+        it only reads one register, and does the (rare) re-init only when the
+        chip is actually wedged. Returns True if a recovery was performed.
+        """
+        if not self.is_bus_off():
+            return False
+        self.reset()
+        if self._last_bitrate is not None:
+            self.set_bitrate(self._last_bitrate)
+        self.set_normal_mode()
+        return True
+
     # ── Transmit ──────────────────────────────────────────────────────────────
 
     def send_message(self, msg_id: int, data, extended: bool = False):
@@ -193,17 +241,21 @@ class MCP2515:
         msg_id   : 11-bit standard ID (0x000–0x7FF) or 29-bit extended ID
         data     : list/bytes/bytearray of up to 8 bytes
         extended : True for extended (29-bit) frame
+
+        NON-BLOCKING: this never waits on a busy buffer. If a previous frame is
+        still pending (e.g. nothing on the bus ACKed it), it is aborted and the
+        new frame is loaded. Blocking here would freeze the whole asyncio loop
+        -- including pings and the INA stream -- whenever a target ECU is
+        missing. The frame itself is sent by hardware after we return.
         """
         if len(data) > 8:
             raise ValueError("CAN data payload must be 8 bytes or fewer")
 
-        # Wait for TX buffer 0 to be free
-        import time
-        deadline = time.ticks_ms() + 100
-        while self._read_reg(TXB0CTRL) & 0x08:  # TXREQ bit
-            if time.ticks_diff(time.ticks_ms(), deadline) > 0:
-                raise RuntimeError("MCP2515: TX buffer 0 busy timeout")
-            time.sleep_ms(1)
+        # If TXB0 is still busy from an earlier frame that could not get on the
+        # bus, abort it instead of waiting. (With one-shot mode this rarely
+        # happens, but it guarantees we never stall the caller.)
+        if self._read_reg(TXB0CTRL) & TXREQ_BIT:
+            self._bit_modify(TXB0CTRL, TXREQ_BIT, 0x00)   # clear TXREQ = abort
 
         if extended:
             # 29-bit extended ID
@@ -225,7 +277,7 @@ class MCP2515:
         for i, byte in enumerate(data):
             self._write_reg(TXB0D0 + i, byte)
 
-        # Request transmission
+        # Request transmission (fire-and-forget; hardware sends it after we return)
         self._cs_low()
         self._spi.write(bytearray([CMD_RTS | 0x01]))  # RTS for TXB0
         self._cs_high()
@@ -318,5 +370,3 @@ class MCP2515:
             self._write_reg(base + 1, (value & 0x07) << 5)
             self._write_reg(base + 2, 0x00)
             self._write_reg(base + 3, 0x00)
-
-
