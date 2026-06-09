@@ -30,6 +30,24 @@ streaming = False   # True while the INA226 readings are being streamed out
 # WHO sent it travels inside the CAN id, so the receiver gets both From and To.
 # Keep the text 7 characters or fewer (1 of the 8 payload bytes is the target).
 
+def _emit_can_trace(kind, msg_id, data, ok=True):
+    """Print one machine-readable CAN trace line for the GUI monitor.
+
+    Mirrors the 'INA,' streaming convention so the host can tell CAN traffic
+    apart from ordinary command replies:
+
+        CAN<TX|RX>,<id-hex>,<data-hex>[,ERR]
+
+    e.g.  CANTX,100,01424154204F4E   ->  id=0x100, data=b'\\x01BAT ON'
+    Never raises (a logging hiccup must not break the command/CAN path)."""
+    try:
+        hexdata = "".join("{:02X}".format(b) for b in data)
+        suffix = "" if ok else ",ERR"
+        print("CAN{},{:03X},{}{}".format(kind, msg_id, hexdata, suffix))
+    except Exception:
+        pass
+
+
 def can_send(target, text):
     """Relay a short text command to another device over CAN.
     Returns True on success, False if CAN is down or the send fails.
@@ -37,11 +55,39 @@ def can_send(target, text):
     if not CAN_OK:
         return False
     try:
-        payload = bytes([ADDR[target]]) + text.encode()
+        addr = ADDR[target]
+    except KeyError:
+        return False
+    payload = bytes([addr]) + text.encode()
+    try:
         can.send_message(id_of(Current_Device), payload)
+        _emit_can_trace("TX", id_of(Current_Device), payload, True)
         return True
     except Exception:
+        _emit_can_trace("TX", id_of(Current_Device), payload, False)
         return False
+
+
+def can_poll_rx():
+    """Drain any CAN frames the MAIN has RECEIVED and emit a 'CANRX,...' trace
+    for each, so the GUI monitor can show incoming traffic too. Returns True if
+    at least one frame was reported. Safe to call often; never raises.
+
+    If your ECUs never transmit back, this simply finds nothing and does
+    nothing -- it is pure upside for the monitor."""
+    if not CAN_OK:
+        return False
+    emitted = False
+    try:
+        while can.check_receive():
+            msg_id, data = can.read_message()
+            if msg_id is None:
+                break
+            _emit_can_trace("RX", msg_id, bytes(data) if data else b"")
+            emitted = True
+    except Exception:
+        pass
+    return emitted
 
 
 def can_receive():
@@ -171,10 +217,10 @@ def commands(cmd):
                 bits = name.split("_")          # split is always available; partition isn't
                 if len(bits) == 2 and bits[0] in ADDR:
                     dev, periph = bits[0], bits[1]
-                    ok = can_send(dev, "{} {}".format(periph, parts[1]))
-                    # DEBUG: shows whether the frame went out. Remove once confirmed.
-                    print("CAN-> {} : {} {}  [{}]".format(
-                        dev, periph, parts[1], "sent" if ok else "FAILED"))
+                    # can_send() now emits a structured 'CANTX,...' trace line
+                    # that the GUI CAN monitor parses, so there's no debug
+                    # print here any more.
+                    can_send(dev, "{} {}".format(periph, parts[1]))
             else:
                 print("ERROR: Unknown command: {}".format(cmd))
 
@@ -185,4 +231,3 @@ def reset():
     streaming = False
     for pin in OUTPUTS.values():
         pin.off()
-

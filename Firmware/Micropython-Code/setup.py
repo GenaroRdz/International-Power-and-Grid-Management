@@ -49,6 +49,7 @@ Current_Device = "MAIN"
 
 # 11-bit CAN id for every device (0x000-0x7FF). Lower id = higher priority,
 # so MAIN is kept lowest to win the bus. Edit freely, just keep them different.
+# The CAN id says WHO SENT a frame (it travels in the frame header).
 IDS = {
     "MAIN": 0x100,
     "ECU1": 0x101,
@@ -57,9 +58,33 @@ IDS = {
     "ECU4": 0x104,
 }
 
+# 1-byte TARGET address that goes in payload byte 0 of every CAN frame (it says
+# WHO the frame is for). This is written out EXPLICITLY on purpose:
+#
+#   * It must NOT depend on dict insertion order. Deriving it with
+#     enumerate(IDS) works only as long as the order is perfect; one reordered
+#     line silently shuffles every address and the GUI shows the wrong routes
+#     (e.g. pressing ECU1 appears as ECU2). Writing it out makes that
+#     impossible and lets you eyeball it at a glance.
+#   * It MUST match the table the GUI CAN monitor uses, which is exactly:
+#         MAIN = 0, ECU1 = 1, ECU2 = 2, ECU3 = 3, ECU4 = 4
+#     Keep these identical on every board (MAIN and all ECUs).
+ADDR = {
+    "MAIN": 0,
+    "ECU1": 1,
+    "ECU2": 2,
+    "ECU3": 3,
+    "ECU4": 4,
+}
+
 NAMES      = {can_id: name for name, can_id in IDS.items()}   # CAN id -> name
-ADDR       = {name: i for i, name in enumerate(IDS)}          # name   -> 1-byte addr
-ADDR_NAMES = {i: name for name, i in ADDR.items()}            # addr   -> name
+ADDR_NAMES = {addr: name for name, addr in ADDR.items()}      # addr   -> name
+
+# Sanity print at boot. Open the REPL (or watch the serial log) right after a
+# reset and you MUST see exactly:
+#   ADDR table -> {'MAIN': 0, 'ECU1': 1, 'ECU2': 2, 'ECU3': 3, 'ECU4': 4}
+# If you see anything else, this board is running a stale setup.py -- re-flash.
+print("ADDR table ->", ADDR)
 
 
 def id_of(name):       # "ECU1" -> 0x101
@@ -82,4 +107,3 @@ except Exception as e:
     can = None
     CAN_OK = False
     print("CAN module not connected properly:", e)
-
