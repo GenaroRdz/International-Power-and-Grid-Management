@@ -1,0 +1,169 @@
+# ============================================================================
+#  FULL SIGNAL SWEEP TEST
+#  Each block pulses a signal 10x, 100 ms ON / 100 ms OFF.
+#
+#  Part 1 : every ECU, each of its 3 signals individually (ECU1..ECU4).
+#  Part 2 : all ECUs together -- all BATs, then all ACCs, then all IGNs.
+#  Part 3 : absolutely everything together (ON ALL / OFF ALL).
+#
+#  The ESP32 does NOT run this file -- the PC streams the commands with
+#  the right timing. Load it with the  R-U-N  SCRIPT  button.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# PART 1 -- individual signals, one ECU at a time
+# ---------------------------------------------------------------------------
+
+# ECU1 -- BAT  (10x)
+LOOP 10
+    ECU1_BAT ON
+    DELAY 100
+    ECU1_BAT OFF
+    DELAY 100
+ENDLOOP
+
+# ECU1 -- ACC  (10x)
+LOOP 10
+    ECU1_ACC ON
+    DELAY 100
+    ECU1_ACC OFF
+    DELAY 100
+ENDLOOP
+
+# ECU1 -- IGN  (10x)
+LOOP 10
+    ECU1_IGN ON
+    DELAY 100
+    ECU1_IGN OFF
+    DELAY 100
+ENDLOOP
+
+# ECU2 -- BAT  (10x)
+LOOP 10
+    ECU2_BAT ON
+    DELAY 100
+    ECU2_BAT OFF
+    DELAY 100
+ENDLOOP
+
+# ECU2 -- ACC  (10x)
+LOOP 10
+    ECU2_ACC ON
+    DELAY 100
+    ECU2_ACC OFF
+    DELAY 100
+ENDLOOP
+
+# ECU2 -- IGN  (10x)
+LOOP 10
+    ECU2_IGN ON
+    DELAY 100
+    ECU2_IGN OFF
+    DELAY 100
+ENDLOOP
+
+# ECU3 -- BAT  (10x)
+LOOP 10
+    ECU3_BAT ON
+    DELAY 100
+    ECU3_BAT OFF
+    DELAY 100
+ENDLOOP
+
+# ECU3 -- ACC  (10x)
+LOOP 10
+    ECU3_ACC ON
+    DELAY 100
+    ECU3_ACC OFF
+    DELAY 100
+ENDLOOP
+
+# ECU3 -- IGN  (10x)
+LOOP 10
+    ECU3_IGN ON
+    DELAY 100
+    ECU3_IGN OFF
+    DELAY 100
+ENDLOOP
+
+# ECU4 -- BAT  (10x)
+LOOP 10
+    ECU4_BAT ON
+    DELAY 100
+    ECU4_BAT OFF
+    DELAY 100
+ENDLOOP
+
+# ECU4 -- ACC  (10x)
+LOOP 10
+    ECU4_ACC ON
+    DELAY 100
+    ECU4_ACC OFF
+    DELAY 100
+ENDLOOP
+
+# ECU4 -- IGN  (10x)
+LOOP 10
+    ECU4_IGN ON
+    DELAY 100
+    ECU4_IGN OFF
+    DELAY 100
+ENDLOOP
+
+# ---------------------------------------------------------------------------
+# PART 2 -- all ECUs together, one signal type at a time
+# ---------------------------------------------------------------------------
+
+# ALL BAT  (every ECU, 10x)
+LOOP 10
+    ECU1_BAT ON
+    ECU2_BAT ON
+    ECU3_BAT ON
+    ECU4_BAT ON
+    DELAY 100
+    ECU1_BAT OFF
+    ECU2_BAT OFF
+    ECU3_BAT OFF
+    ECU4_BAT OFF
+    DELAY 100
+ENDLOOP
+
+# ALL ACC  (every ECU, 10x)
+LOOP 10
+    ECU1_ACC ON
+    ECU2_ACC ON
+    ECU3_ACC ON
+    ECU4_ACC ON
+    DELAY 100
+    ECU1_ACC OFF
+    ECU2_ACC OFF
+    ECU3_ACC OFF
+    ECU4_ACC OFF
+    DELAY 100
+ENDLOOP
+
+# ALL IGN  (every ECU, 10x)
+LOOP 10
+    ECU1_IGN ON
+    ECU2_IGN ON
+    ECU3_IGN ON
+    ECU4_IGN ON
+    DELAY 100
+    ECU1_IGN OFF
+    ECU2_IGN OFF
+    ECU3_IGN OFF
+    ECU4_IGN OFF
+    DELAY 100
+ENDLOOP
+
+# ---------------------------------------------------------------------------
+# PART 3 -- everything together
+# ---------------------------------------------------------------------------
+
+# ALL signals, ALL ECUs  (10x)
+LOOP 10
+    ON ALL
+    DELAY 100
+    OFF ALL
+    DELAY 100
+ENDLOOP
