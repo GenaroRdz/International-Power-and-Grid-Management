@@ -8,6 +8,7 @@ from New_device_connection_2 import ESP32Connection
 from Scope_tab import ScopeTab
 from settings import load_settings, save_settings
 from CAN_Monitor_V7  import CanMonitor
+from terminal_tab import TerminalTab
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 BG          = "#0d0f12"
@@ -396,6 +397,20 @@ class ECUSupplyController(tk.Tk):
             self.tab_btn_can.configure(bg=ACCENT_BLUE, fg=BG)
             self._canvas.yview_moveto(0) # Reset scroll position
 
+    def _switch_output_tab(self, which):
+        """Switch the CHANNEL OUTPUTS area between the button grid and the
+        serial terminal. Pure UI swap -- channel state is untouched."""
+        if which == "BTN":
+            self.sub_frame_term.pack_forget()
+            self.sub_frame_buttons.pack(fill="both", expand=True)
+            self.sub_btn_buttons.configure(bg=ACCENT_BLUE, fg=BG)
+            self.sub_btn_term.configure(bg=CARD, fg=TEXT_SEC)
+        else:
+            self.sub_frame_buttons.pack_forget()
+            self.sub_frame_term.pack(fill="both", expand=True)
+            self.sub_btn_buttons.configure(bg=CARD, fg=TEXT_SEC)
+            self.sub_btn_term.configure(bg=ACCENT_BLUE, fg=BG)
+
     def _build_title(self, parent):
         hdr = tk.Frame(parent, bg=BG)
         hdr.pack(fill="x", pady=(0, self._s(14)))
@@ -442,11 +457,44 @@ class ECUSupplyController(tk.Tk):
         self.disconnect_button.pack(side="left", padx=(self._s(5), self._s(8)))
 
     def _build_channels(self, parent, pad):
-        tk.Label(parent, text="CHANNEL OUTPUTS",
-                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(
-            anchor="w", padx=self._s(18), pady=(self._s(4), 0))
+        # ── Sub-tab bar: BUTTONS / TERMINAL (lives inside CHANNEL OUTPUTS) ────
+        sub_bar = tk.Frame(parent, bg=PANEL)
+        sub_bar.pack(fill="x", padx=self._s(18), pady=(self._s(4), 0))
 
-        grid = tk.Frame(parent, bg=PANEL)
+        tk.Label(sub_bar, text="CHANNEL OUTPUTS",
+                 font=FONT_LABEL, fg=TEXT_DIM, bg=PANEL).pack(side="left")
+
+        self.sub_btn_term = tk.Button(
+            sub_bar, text="TERMINAL", font=FONT_LABEL,
+            fg=TEXT_SEC, bg=CARD, relief="flat", bd=0,
+            activebackground=BORDER, cursor="hand2",
+            command=lambda: self._switch_output_tab("TERM"),
+            padx=self._s(12), pady=self._s(3))
+        self.sub_btn_term.pack(side="right")
+
+        self.sub_btn_buttons = tk.Button(
+            sub_bar, text="BUTTONS", font=FONT_LABEL,
+            fg=BG, bg=ACCENT_BLUE, relief="flat", bd=0,
+            activebackground=ACCENT_CYAN, cursor="hand2",
+            command=lambda: self._switch_output_tab("BTN"),
+            padx=self._s(12), pady=self._s(3))
+        self.sub_btn_buttons.pack(side="right", padx=(0, self._s(5)))
+
+        # Two stacked sub-frames; only one is shown at a time.
+        self.sub_frame_buttons = tk.Frame(parent, bg=PANEL)
+        self.sub_frame_buttons.pack(fill="both", expand=True)
+
+        self.sub_frame_term = tk.Frame(parent, bg=PANEL)
+        # not packed yet -> starts hidden
+
+        # Terminal lives in its sub-frame. It talks straight to the ESP32.
+        self._terminal_tab = TerminalTab(self.sub_frame_term, self.esp32,
+                                         bg=PANEL)
+        self._terminal_tab.pack(fill="both", expand=True,
+                                padx=self._s(4), pady=self._s(4))
+
+        # ── The original button grid, now built into the BUTTONS sub-frame ───
+        grid = tk.Frame(self.sub_frame_buttons, bg=PANEL)
         grid.pack(fill="x", **pad)
 
         ch_colors = [ACCENT_BLUE, ACCENT_CYAN, GREEN, ORANGE]
@@ -556,6 +604,11 @@ class ECUSupplyController(tk.Tk):
         cm = getattr(self, "_can_monitor", None)
         if cm is not None:
             cm.feed_line(line)
+        # Also echo the reply in the serial terminal. feed_response() is
+        # thread-safe (it marshals onto the Tk thread via after()).
+        term = getattr(self, "_terminal_tab", None)
+        if term is not None:
+            term.feed_response(line)
 
     def _poll_ina_queue(self):
         try:
@@ -794,6 +847,9 @@ class ECUSupplyController(tk.Tk):
         cm = getattr(self, "_can_monitor", None)
         if cm is not None:
             cm.set_connected(self.connected)
+        term = getattr(self, "_terminal_tab", None)
+        if term is not None:
+            term.set_connected(self.connected)
 
     # ── Reset ─────────────────────────────────────────────────────────────────
     def _do_reset(self):
