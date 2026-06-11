@@ -886,21 +886,21 @@ class ECUSupplyController(tk.Tk):
 
         if ch == 1 and m_idx == 0 and on:   #Battery Channel 2
             print("CH2 BATTERY is on")
-            self.esp32.send("ECU2_BAT on")
+            self.esp32.send("ECU2_BAT off")
         if ch == 1 and m_idx == 0 and not on:   #Battery Channel 2
             print("CH2 BATTERY is off")
             self.esp32.send("ECU2_BAT off")
 
         if ch == 1 and m_idx == 1 and on:   #ACC Channel 2
-            print("CH2 ACC is ON")
-            self.esp32.send("ECU2_ACC on")
+            print("CH2 ACC is off")
+            self.esp32.send("ECU2_ACC off")
         if ch == 1 and m_idx == 1 and not on:   #ACC Channel 2
             print("CH2 ACC is OFF")
             self.esp32.send("ECU2_ACC off")
 
         if ch == 1 and m_idx == 2 and on:   #IGN Channel 2
-            print("CH2 IGN is ON")
-            self.esp32.send("ECU2_IGN on")
+            print("CH2 IGN is Off")
+            self.esp32.send("ECU2_IGN off")
         if ch == 1 and m_idx == 2 and not on:   #IGN Channel 2
             print("CH2 IGN is OFF")
             self.esp32.send("ECU2_IGN off")

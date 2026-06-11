@@ -2,7 +2,7 @@
 from machine import Pin, SPI
 from mcp2515 import MCP2515
 
-Current_Device = "ECU1"        # <-- change to ECU2 / ECU3 / ECU4 on each board
+Current_Device = "ECU2"        # <-- change to ECU2 / ECU3 / ECU4 on each board
 bit_rate = 500                 # MUST match every other board on the bus
 
 

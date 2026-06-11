@@ -318,3 +318,4 @@ class MCP2515:
             self._write_reg(base + 1, (value & 0x07) << 5)
             self._write_reg(base + 2, 0x00)
             self._write_reg(base + 3, 0x00)
+

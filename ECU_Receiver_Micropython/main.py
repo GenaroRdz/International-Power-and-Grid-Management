@@ -1,6 +1,4 @@
 # main.py  --  ECU board.  (In canbus.py set  ME = "ECU1"  (or ECU2, ECU3, ECU4))
-#
-# This board LISTENS for commands meant for it, acts, and can SEND too.
 
 import time
 from functions import send_message, receive_message
