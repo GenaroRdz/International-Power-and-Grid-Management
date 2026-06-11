@@ -9,6 +9,7 @@ SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 DEFAULTS = {
     "port": "COM7",
     "baudrate": 115200,
+    
 }
 
 
