@@ -99,3 +99,10 @@ The control interface requires **Python 3.13.xx**. Navigate to the software fold
 cd software
 pip install -r requirements.txt
 python main.py
+
+Authors:
+Genaro Rodríguez Garza - A00831640 
+Juan Pablo Carrasco Ferra Martínez - A01252910 
+Eduardo de la Rosa Flores - A01039969 
+Kleber Andres Molina Yepez - A00838725 
+Jose Joaquin Rodriguez Cisneros - A00833104 
